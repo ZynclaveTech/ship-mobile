@@ -198,6 +198,9 @@ which names a release may override.
 per device, at most one per app session. `ShipPopups.resetShownForDebug()` forgets what
 was shown; it is for debug screens only.
 
+**Lottie.** Text inside a Lottie file is not translated: OTA strings reach `text`, `button`
+and `badge` components only.
+
 ## Publish and see it
 
 ```sh
@@ -220,7 +223,6 @@ Then open the app and sync: the new content shows without a store release.
 
 ## Known differences between iOS and Android
 
-- Text inside a Lottie file is not translated, on either platform.
 - First launch: Android treats the first launch after an app update as not a first launch,
   so an update that adds the SDK can show a popup at once. iOS counts it as a first launch
   and holds popups back until the next one.

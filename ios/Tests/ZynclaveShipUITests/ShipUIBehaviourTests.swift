@@ -82,6 +82,8 @@ private struct ProbeTile: View {
         }
     }
 
+    // Exit tests need a separate process, which iOS test runners cannot spawn.
+    #if os(macOS)
     @Test func aWebSchemeStopsTheApp() async {
         await #expect(processExitsWith: .failure) {
             _ = ShipUIOptions(deeplinkScheme: "https")
@@ -90,6 +92,7 @@ private struct ProbeTile: View {
             _ = ShipUIOptions(deeplinkScheme: "")
         }
     }
+    #endif
 
     // MARK: Cards
 
