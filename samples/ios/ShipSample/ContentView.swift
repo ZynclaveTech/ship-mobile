@@ -39,7 +39,7 @@ struct ContentView: View {
 
     @ViewBuilder private var header: some View {
         Section {
-            Text(ship.content?.string("sample_greeting", locale: "en") ?? "Hello")
+            Text(ship.content?.string("sample_greeting", locale: ship.language) ?? "Hello")
                 .font(.title2)
             if let content = ship.content, ShipFlags.bool("show_banner", in: content) == true {
                 Label("Banner is on", systemImage: "flag.fill").foregroundStyle(.tint)

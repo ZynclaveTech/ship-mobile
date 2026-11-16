@@ -6,6 +6,7 @@ import ZynclaveShipUI
 /// The release's public key. Replace it with the key your Ship app gives you.
 enum SampleKey {
     static let publicKey = "REPLACE_WITH_SHIP_SAMPLE_PUBLIC_KEY"
+    static var isPlaceholder: Bool { publicKey == "REPLACE_WITH_SHIP_SAMPLE_PUBLIC_KEY" }
 }
 
 /// Turns `shipsample://details` into navigation. Used by `.onOpenURL` and by
@@ -36,6 +37,15 @@ final class Ship: ObservableObject {
     var isConfigured: Bool { client != nil }
 
     let router: Router
+    private let options: ShipUIOptions?
+
+    /// True while a sync runs, so "Check now" can be disabled.
+    @Published private(set) var syncing = false
+
+    /// The language Ship uses for text, so the greeting matches popups.
+    var language: String {
+        options?.language() ?? Locale.current.language.languageCode?.identifier ?? "en"
+    }
 
     init() {
         let router = Router()
@@ -48,9 +58,14 @@ final class Ship: ObservableObject {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
         runtime = "ios-" + version
 
-        guard let key = PinnedKey(kid: "ship-sample-1", base64: SampleKey.publicKey) else {
-            client = nil; cards = nil; popups = nil
+        guard !SampleKey.isPlaceholder else {
+            client = nil; cards = nil; popups = nil; options = nil
             status = "Ship is not configured: see README"
+            return
+        }
+        guard let key = PinnedKey(kid: "ship-sample-1", base64: SampleKey.publicKey) else {
+            client = nil; cards = nil; popups = nil; options = nil
+            status = "Ship public key is invalid: see README"
             return
         }
         let config = ShipConfig(
@@ -70,20 +85,28 @@ final class Ship: ObservableObject {
             embeddedPopups: .main
         )
         self.client = client
+        self.options = options
         cards = ShipCards(client: client, options: options)
         popups = ShipPopups(client: client, options: options)
         publish()
     }
 
-    /// Fetches the latest release, then lets popups re-check.
+    /// Fetches the latest release, then lets popups re-check. A second call
+    /// while one is running does nothing; a cancelled sync leaves no trace.
     func sync() async {
-        guard let client else { return }
+        guard let client, !syncing else { return }
+        syncing = true
+        defer { syncing = false }
         do {
             switch try await client.sync() {
             case .applied: status = "Updated"
             case .upToDate: status = "Up to date"
             case .noUpdate: status = "No update for this device"
             }
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
             status = "Sync failed: \(error.localizedDescription)"
         }

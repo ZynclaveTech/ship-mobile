@@ -12,7 +12,7 @@ struct DebugView: View {
                 row("Runtime", ship.runtime)
                 if !ship.status.isEmpty { row("Status", ship.status) }
                 Button("Check now") { Task { await ship.sync() } }
-                    .disabled(!ship.isConfigured)
+                    .disabled(!ship.isConfigured || ship.syncing)
             }
             .navigationTitle("Debug")
         }
