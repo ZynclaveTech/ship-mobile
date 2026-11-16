@@ -13,10 +13,16 @@ let package = Package(
         .library(name: "ZynclaveShip", targets: ["ZynclaveShip"]),
         .library(name: "ZynclaveShipUI", targets: ["ZynclaveShipUI"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/airbnb/lottie-spm.git", from: "4.6.1"),
+    ],
     targets: [
         .target(name: "ZynclaveShip", path: "ios/Sources/ZynclaveShip"),
         .testTarget(name: "ZynclaveShipTests", dependencies: ["ZynclaveShip"], path: "ios/Tests/ZynclaveShipTests"),
-        .target(name: "ZynclaveShipUI", dependencies: ["ZynclaveShip"], path: "ios/Sources/ZynclaveShipUI"),
+        .target(name: "ZynclaveShipUI", dependencies: [
+            "ZynclaveShip",
+            .product(name: "Lottie", package: "lottie-spm"),
+        ], path: "ios/Sources/ZynclaveShipUI"),
         .testTarget(name: "ZynclaveShipUITests", dependencies: ["ZynclaveShipUI"], path: "ios/Tests/ZynclaveShipUITests"),
     ]
 )
