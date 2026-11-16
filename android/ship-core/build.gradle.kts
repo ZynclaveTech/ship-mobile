@@ -22,8 +22,10 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
-            // Robolectric's SDK 37 sandbox reaches into FileDescriptor through
-            // jdk.internal.access, which java.base does not export.
+            // Not needed for the sdk = [33] these tests pin (they pass without it
+            // on JDK 21). Robolectric's sandbox for newer SDKs (37) reaches into
+            // FileDescriptor through jdk.internal.access, which java.base does
+            // not export; kept so a test that pins a newer SDK still runs.
             all { it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }
         }
     }

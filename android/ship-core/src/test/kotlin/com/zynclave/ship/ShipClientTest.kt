@@ -25,6 +25,11 @@ class ShipClientTest {
         ShipClient(testConfig(signer, runtime), root, net, Dispatchers.Unconfined)
 
     @Test
+    fun `constructs with the default OkHttp transport`() {
+        assertNull(ShipClient(testConfig(signer), temp.root).applied)
+    }
+
+    @Test
     fun `applies a release and serves its files and strings`() = runTest {
         val net = FakeCdn(signer)
         net.release(seq = 1, "strings/en.json" to """{"hello":"Hi OTA"}""", "images/a.png" to "PNG")

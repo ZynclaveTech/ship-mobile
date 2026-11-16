@@ -133,7 +133,7 @@ class ShipContent internal constructor() {
 class ShipClient(
     private val config: ShipConfig,
     private val root: File,
-    private val transport: ShipTransport,
+    private val transport: ShipTransport = OkHttpShipTransport(OkHttpClient()),
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     val content = ShipContent()

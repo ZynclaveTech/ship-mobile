@@ -20,24 +20,24 @@ object ShipTheme {
      */
     val allowlist: Set<String> = setOf("primary300", "primary200", "accent500")
 
-    data class Pair(val light: Long, val dark: Long)
+    data class ThemeColor(val light: Long, val dark: Long)
 
-    private class Cached(val content: ShipContent, val releaseId: String, val theme: Map<String, Pair>)
+    private class Cached(val content: ShipContent, val releaseId: String, val theme: Map<String, ThemeColor>)
 
     @Volatile private var cache: Cached? = null
 
-    fun parse(text: String): Map<String, Pair> {
+    fun parse(text: String): Map<String, ThemeColor> {
         val obj = runCatching { ManifestVerifier.json.parseToJsonElement(text) as? JsonObject }.getOrNull()
             ?: return emptyMap()
-        val out = HashMap<String, Pair>()
+        val out = HashMap<String, ThemeColor>()
         for ((token, value) in obj) {
             if (token !in allowlist) continue
             when (value) {
-                is JsonPrimitive -> hexColor(value)?.let { out[token] = Pair(it, it) }
+                is JsonPrimitive -> hexColor(value)?.let { out[token] = ThemeColor(it, it) }
                 is JsonObject -> {
                     val light = (value["light"] as? JsonPrimitive)?.let(::hexColor)
                     val dark = (value["dark"] as? JsonPrimitive)?.let(::hexColor)
-                    if (light != null && dark != null) out[token] = Pair(light, dark)
+                    if (light != null && dark != null) out[token] = ThemeColor(light, dark)
                 }
                 else -> Unit
             }
@@ -54,14 +54,14 @@ object ShipTheme {
         return 0xFF000000L or h.toLong(16)
     }
 
-    fun color(token: String, dark: Boolean, theme: Map<String, Pair>): Long? =
+    fun color(token: String, dark: Boolean, theme: Map<String, ThemeColor>): Long? =
         theme[token]?.let { if (dark) it.dark else it.light }
 
     /** The override for an allowlisted [token] in the applied release, or null. [dark] is the host's current mode. */
     fun color(token: String, dark: Boolean, content: ShipContent?): Long? = color(token, dark, theme(content))
 
     /** Parsed once per release, so the many color reads per frame cost a field read and a map lookup. */
-    private fun theme(content: ShipContent?): Map<String, Pair> {
+    private fun theme(content: ShipContent?): Map<String, ThemeColor> {
         val state = content?.state
         if (content == null || state == null || state.revertToEmbedded) return emptyMap()
         cache?.takeIf { it.content === content && it.releaseId == state.releaseId }?.let { return it.theme }
