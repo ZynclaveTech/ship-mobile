@@ -87,7 +87,8 @@ public struct Expectation: Sendable {
     }
 }
 
-public enum ShipError: Error, Equatable, Sendable {
+/// Why a sync or a verification failed.
+public enum ShipError: Error, Equatable, Sendable, LocalizedError {
     case malformed(String)
     case badSignature
     case wrongTarget
@@ -96,6 +97,20 @@ public enum ShipError: Error, Equatable, Sendable {
     case assetMismatch(String)
     case http(Int)
     case tooLarge
+
+    /// Short, and safe to log: no keys, no content.
+    public var errorDescription: String? {
+        switch self {
+        case .malformed(let detail): return "Malformed: \(detail)"
+        case .badSignature: return "Bad signature"
+        case .wrongTarget: return "Manifest is for another app, platform, channel or runtime"
+        case .stale: return "Older than the applied release"
+        case .unsafeAssetName(let name): return "Unsafe asset name: \(name)"
+        case .assetMismatch(let name): return "Asset does not match its hash: \(name)"
+        case .http(let status): return "HTTP \(status)"
+        case .tooLarge: return "Response larger than allowed"
+        }
+    }
 }
 
 public enum ManifestVerifier {

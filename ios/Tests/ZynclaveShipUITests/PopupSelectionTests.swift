@@ -42,7 +42,7 @@ import ZynclaveShip
         #expect(p.candidates(now: .now).map(\.id) == ["low"])
     }
 
-    @Test func shownMemoryPersistsAcrossLaunchesAndUsesTheSourceKey() async {
+    @Test func shownMemoryPersistsAcrossLaunchesUnderItsStorageKey() async {
         let d = freshDefaults()
         let a = popups(files: ["sdui/popups/a.json": popupJSON(id: "a")], defaults: d)
         await a.arm(now: .now)
@@ -169,6 +169,42 @@ import ZynclaveShip
         p.close()
         #expect(closed == ["a"])
         #expect(p.armed == nil)
+    }
+
+    @Test func aPopupThatLosesTheRaceAfterPreflightIsReleased() async {
+        var closed: [String] = []
+        var o = options()
+        o.onPopupClosed = { closed.append($0.id) }
+        let d = freshDefaults()
+        d.set(1, forKey: "sdui.popups.launches")
+        var p: ShipPopups!
+        o.popupPreflight = { _ in
+            // Another popup was shown this session while the preflight ran.
+            p.markShown(SDUI.Popup(id: "other", targeted: false, start: nil, end: nil, priority: 0,
+                                   closeButton: true, body: .spacer(height: 1)))
+            return true
+        }
+        p = ShipPopups(client: client(root: scratch(), files: ["sdui/popups/a.json": popupJSON(id: "a")]),
+                       options: o, defaults: d, observesLifecycle: false)
+        await p.arm(now: .now)
+        #expect(p.armed == nil)
+        #expect(closed == ["a"], "what the preflight loaded is released")
+    }
+
+    @Test func resetShownForDebugForgetsShownPopupsAndLaunches() async {
+        let d = freshDefaults()
+        let p = popups(files: ["sdui/popups/a.json": popupJSON(id: "a")], defaults: d)
+        await p.arm(now: .now)
+        p.markShown(p.armed!)
+        p.close()
+        await p.arm(now: .now)
+        #expect(p.armed == nil, "spent, and one per session")
+
+        p.resetShownForDebug()
+        #expect(d.stringArray(forKey: "sdui.popups.shown") == nil)
+        #expect(d.object(forKey: "sdui.popups.launches") == nil, "the next cold start is a first launch again")
+        await p.arm(now: .now)
+        #expect(p.armed?.id == "a", "shown again in this session")
     }
 
     // MARK: Embedded

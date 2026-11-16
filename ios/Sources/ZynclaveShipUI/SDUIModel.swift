@@ -8,6 +8,10 @@
 //  `audience` is "all" or "targeted". A targeted definition shows only when
 //  the app's eligibility list names its id; no list hides it.
 //
+//  Android parses the same way, and so does `ship validate`: JSON types are
+//  read exactly (a `true` is never a 1, a 0 never a `false`), and the shared
+//  corpus in the repo's `testdata/sdui` holds both platforms to it.
+//
 
 import Foundation
 
@@ -16,6 +20,7 @@ public enum SDUI {
     public static let rendererVersion = 1
     public static let maxNodes = 40
     public static let maxDepth = 6
+    /// In Unicode code points (scalars), as `ship validate` and Android count.
     public static let maxTextLength = 500
     /// At most this many server cards per tab per feed.
     public static let maxCardsPerFeed = 2
@@ -67,7 +72,11 @@ public enum SDUI {
         public let fields: [String: SDUIJSON]
     }
 
-    public struct Invalid: Error, Equatable { public let reason: String }
+    /// Why a definition was dropped.
+    public struct Invalid: Error, Equatable, LocalizedError {
+        public let reason: String
+        public var errorDescription: String? { "Invalid definition: \(reason)" }
+    }
 }
 
 // MARK: - Parsing (strict)
@@ -81,30 +90,17 @@ extension SDUI {
     /// in the same release; an image that isn't makes the card invalid.
     public static func parseCard(_ data: Data, scheme: String, customTypes: Set<String>,
                                  assetExists: (String) -> Bool) throws -> Card {
-        guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            throw Invalid(reason: "not a JSON object")
-        }
-        guard let schema = obj["schema"] as? Int, schema >= 1, schema <= schemaVersion else {
-            throw Invalid(reason: "unsupported schema")
-        }
-        if let min = obj["minRenderer"] {
-            guard let m = min as? Int, m <= rendererVersion else { throw Invalid(reason: "needs a newer renderer") }
-        }
-        guard let id = obj["id"] as? String, id.range(of: #"^[a-z0-9-]{1,64}$"#, options: .regularExpression) != nil else {
-            throw Invalid(reason: "bad id")
-        }
-        let targeted = try audienceIsTargeted(obj["audience"])
-        let start = try optionalDate(obj["start"], "start")
-        let end = try optionalDate(obj["end"], "end")
+        let (obj, id, targeted, start, end) = try header(data)
 
         guard let placement = obj["placement"] as? [String: Any],
               let tabs = placement["tabs"] as? [String], !tabs.isEmpty,
               tabs.allSatisfy({ $0 == "discover" || $0 == "following" }),
-              let position = placement["position"] as? Int, (0...50).contains(position) else {
+              let position = integer(placement["position"]), (0...50).contains(position) else {
             throw Invalid(reason: "bad placement")
         }
-        let priority = placement["priority"] as? Int ?? 0
-        let dismissible = obj["dismissible"] as? Bool ?? true
+        let priority = integer(placement["priority"]) ?? 0
+        // Not a JSON boolean (a 0, a "false") means absent: the default.
+        let dismissible = bool(obj["dismissible"]) ?? true
         let tap = try obj["tap"].map { try action($0, scheme: scheme) }
 
         var count = 0
@@ -124,12 +120,71 @@ extension SDUI {
         }
     }
 
+    /// What cards and popups share, checked the same way for both.
+    private static func header(_ data: Data) throws -> ([String: Any], String, Bool, Date?, Date?) {
+        guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            throw Invalid(reason: "not a JSON object")
+        }
+        guard let schema = integer(obj["schema"]), schema >= 1, schema <= schemaVersion else {
+            throw Invalid(reason: "unsupported schema")
+        }
+        if let min = obj["minRenderer"] {
+            guard let m = integer(min), m <= rendererVersion else { throw Invalid(reason: "needs a newer renderer") }
+        }
+        guard let id = obj["id"] as? String, isDefinitionID(id) else { throw Invalid(reason: "bad id") }
+        let targeted = try audienceIsTargeted(obj["audience"])
+        return (obj, id, targeted, try optionalDate(obj["start"], "start"), try optionalDate(obj["end"], "end"))
+    }
+
+    /// `[a-z0-9-]{1,64}`, the whole string: a trailing newline is not allowed
+    /// (a regex `$` would let one through).
+    static func isDefinitionID(_ id: String) -> Bool {
+        let scalars = id.unicodeScalars
+        return (1...64).contains(scalars.count) && scalars.allSatisfy {
+            ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "-"
+        }
+    }
+
+    /// Seconds, no fraction, `Z` or a `+hh:mm` offset: what `ship validate`
+    /// checks and Android accepts. ISO8601DateFormatter alone also takes `+hhmm`.
+    private static let isoDate = try! NSRegularExpression(
+        pattern: #"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})\z"#)
+
     private static func optionalDate(_ value: Any?, _ field: String) throws -> Date? {
         guard let value else { return nil }
-        guard let s = value as? String, let d = ISO8601DateFormatter().date(from: s) else {
+        guard let s = value as? String,
+              isoDate.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil,
+              let d = ISO8601DateFormatter().date(from: s) else {
             throw Invalid(reason: "bad \(field)")
         }
         return d
+    }
+
+    // MARK: JSON values, read exactly
+
+    /// A JSON boolean; never a number posing as one.
+    static func bool(_ value: Any?) -> Bool? {
+        guard let n = value as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() else { return nil }
+        return n.boolValue
+    }
+
+    /// A whole JSON number, `3` or `3.0`; not `"3"`, not `2.5`, not `true`.
+    static func integer(_ value: Any?) -> Int? {
+        guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+        let d = n.doubleValue
+        guard d.isFinite, d == d.rounded(), abs(d) < 1e15 else { return nil }
+        return Int(d)
+    }
+
+    /// `<scheme>://` exactly as written, no whitespace (a space would otherwise
+    /// be percent-encoded into a valid URL), and a non-empty host.
+    static func link(_ value: Any?, scheme: String) -> URL? {
+        guard let s = value as? String, s.hasPrefix("\(scheme)://"),
+              !s.unicodeScalars.contains(where: { $0 == " " || $0 == "\t" || $0 == "\r" || $0 == "\n" }),
+              let url = URL(string: s), url.scheme == scheme, let host = url.host(percentEncoded: true), !host.isEmpty else {
+            return nil
+        }
+        return url
     }
 
     static func action(_ value: Any, scheme: String) throws -> Action {
@@ -138,14 +193,10 @@ extension SDUI {
         case "dismiss":
             return .dismiss
         case "deeplink":
-            guard let s = obj["url"] as? String, let url = URL(string: s), url.scheme == scheme, url.host != nil else {
-                throw Invalid(reason: "deeplink must be \(scheme)://")
-            }
+            guard let url = link(obj["url"], scheme: scheme) else { throw Invalid(reason: "deeplink must be \(scheme)://") }
             return .deeplink(url)
         case "web":
-            guard let s = obj["url"] as? String, let url = URL(string: s), url.scheme == "https", url.host != nil else {
-                throw Invalid(reason: "web link must be https://")
-            }
+            guard let url = link(obj["url"], scheme: "https") else { throw Invalid(reason: "web link must be https://") }
             return .web(url)
         default:
             throw Invalid(reason: "unknown action \(type)")
@@ -157,7 +208,7 @@ extension SDUI {
         let key = obj["key"] as? String
         let fallback = obj["fallback"] as? String
         guard key != nil || fallback != nil else { throw Invalid(reason: "text needs key or fallback") }
-        if let f = fallback, f.count > maxTextLength { throw Invalid(reason: "text too long") }
+        if let f = fallback, f.unicodeScalars.count > maxTextLength { throw Invalid(reason: "text too long") }
         return TextValue(key: key, fallback: fallback)
     }
 
@@ -217,9 +268,10 @@ extension SDUI {
                           cornerRadius: try number(obj["cornerRadius"], default: 0, max: 48),
                           children: children)
         case "text":
-            let style = obj["style"] as? String ?? "body"
-            guard textStyles.contains(style) else { throw Invalid(reason: "bad text style") }
-            let maxLines = obj["maxLines"] as? Int
+            // Present but not a string (a number, a null) is refused, not read as the default.
+            let style = obj.keys.contains("style") ? obj["style"] as? String : "body"
+            guard let style, textStyles.contains(style) else { throw Invalid(reason: "bad text style") }
+            let maxLines = integer(obj["maxLines"])
             if let m = maxLines, !(1...20).contains(m) { throw Invalid(reason: "bad maxLines") }
             return .text(try text(obj), style: style, maxLines: maxLines, color: try color(obj["color"]))
         case "image":
@@ -235,10 +287,10 @@ extension SDUI {
                 throw Invalid(reason: "lottie must be an asset in this release")
             }
             return .lottie(asset: src, height: try number(obj["height"], default: 160, max: 480),
-                           loop: obj["loop"] as? Bool ?? true)
+                           loop: bool(obj["loop"]) ?? true)
         case "button":
-            let style = obj["style"] as? String ?? "primary"
-            guard buttonStyles.contains(style), let act = obj["action"] else { throw Invalid(reason: "bad button") }
+            let style = obj.keys.contains("style") ? obj["style"] as? String : "primary"
+            guard let style, buttonStyles.contains(style), let act = obj["action"] else { throw Invalid(reason: "bad button") }
             return .button(try text(obj["label"]), style: style, action: try action(act, scheme: scheme))
         case "badge":
             return .badge(try text(obj["text"]), color: try color(obj["color"]))
@@ -285,31 +337,13 @@ extension SDUI {
     /// the whole popup.
     public static func parsePopup(_ data: Data, scheme: String, customTypes: Set<String>,
                                   assetExists: (String) -> Bool) throws -> Popup {
-        guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            throw Invalid(reason: "not a JSON object")
-        }
-        guard let schema = obj["schema"] as? Int, schema >= 1, schema <= schemaVersion else {
-            throw Invalid(reason: "unsupported schema")
-        }
-        if let min = obj["minRenderer"] {
-            guard let m = min as? Int, m <= rendererVersion else { throw Invalid(reason: "needs a newer renderer") }
-        }
-        guard let id = obj["id"] as? String, id.range(of: #"^[a-z0-9-]{1,64}$"#, options: .regularExpression) != nil else {
-            throw Invalid(reason: "bad id")
-        }
-        let targeted = try audienceIsTargeted(obj["audience"])
-        let f = ISO8601DateFormatter()
-        func date(_ key: String) throws -> Date? {
-            guard let v = obj[key] else { return nil }
-            guard let s = v as? String, let d = f.date(from: s) else { throw Invalid(reason: "bad \(key)") }
-            return d
-        }
+        let (obj, id, targeted, start, end) = try header(data)
         guard let bodyObj = obj["body"] else { throw Invalid(reason: "no body") }
         var count = 0
         let body = try node(bodyObj, depth: 1, count: &count, scheme: scheme, customTypes: customTypes, assetExists: assetExists)
-        return Popup(id: id, targeted: targeted, start: try date("start"), end: try date("end"),
-                     priority: obj["priority"] as? Int ?? 0,
-                     closeButton: obj["closeButton"] as? Bool ?? true, body: body)
+        return Popup(id: id, targeted: targeted, start: start, end: end,
+                     priority: integer(obj["priority"]) ?? 0,
+                     closeButton: bool(obj["closeButton"]) ?? true, body: body)
     }
 
     /// The popup to show now: in schedule, never shown, highest priority

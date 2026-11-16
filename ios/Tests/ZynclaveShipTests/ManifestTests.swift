@@ -48,7 +48,7 @@ let expectProd = Expectation(app: "myapp", runtime: "rt-1", channel: "prod")
         payload[payload.count - 5] ^= 0x01
         env["payload"] = payload.base64EncodedString()
         let raw = try JSONSerialization.data(withJSONObject: env)
-        #expect(throws: ShipError.self) {
+        #expect(throws: ShipError.badSignature) {
             try ManifestVerifier.verify(raw, pinned: [s.pinned], expect: expectProd)
         }
     }
@@ -105,5 +105,51 @@ let expectProd = Expectation(app: "myapp", runtime: "rt-1", channel: "prod")
         let s = TestSigner()
         let raw = try s.envelope(manifest(assets: [["name": name, "sha256": String(repeating: "a", count: 64), "size": 1]]))
         #expect(throws: ShipError.self) { try ManifestVerifier.verify(raw, pinned: [s.pinned], expect: expectProd) }
+    }
+}
+
+/// Envelopes signed by the Ship server's own signing code (`testdata/signing`,
+/// shared with the Android tests): what the server writes is what this verifies.
+@Suite struct SigningVectorTests {
+    private static let dir = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appending(path: "testdata/signing")
+
+    private func text(_ name: String) throws -> String {
+        try String(contentsOf: Self.dir.appending(path: name), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func pinned() throws -> [PinnedKey] {
+        let kid = try text("kid.txt"), key = try text("public-key.b64")
+        return [try #require(PinnedKey(kid: kid, base64: key))]
+    }
+
+    private func expect(_ platform: String) -> ZynclaveShip.Expectation {
+        Expectation(app: "ship-sample", platform: platform, runtime: "\(platform)-1.0.0", channel: "testflight")
+    }
+
+    @Test(arguments: ["ios", "android"])
+    func theServersEnvelopeVerifies(_ platform: String) throws {
+        #expect(try text("kid.txt") == "test-vector-1")
+        let raw = try Data(contentsOf: Self.dir.appending(path: "envelope-\(platform).json"))
+        let m = try ManifestVerifier.verify(raw, pinned: try pinned(), expect: expect(platform))
+        #expect(m.app == "ship-sample" && m.platform == platform)
+        let asset = try Data(contentsOf: Self.dir.appending(path: "asset-strings-en.json"))
+        let hex = SHA256.hash(data: asset).map { String(format: "%02x", $0) }.joined()
+        #expect(m.assets == [Asset(name: "strings/en.json", sha256: hex, size: Int64(asset.count))])
+    }
+
+    @Test(arguments: ["ios", "android"])
+    func oneFlippedPayloadByteIsABadSignature(_ platform: String) throws {
+        let raw = try Data(contentsOf: Self.dir.appending(path: "envelope-\(platform).json"))
+        var env = try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])
+        let encoded = try #require(env["payload"] as? String)
+        var payload = try #require(Data(base64Encoded: encoded))
+        payload[payload.count / 2] ^= 0x01
+        env["payload"] = payload.base64EncodedString()
+        let tampered = try JSONSerialization.data(withJSONObject: env)
+        #expect(throws: ShipError.badSignature) {
+            try ManifestVerifier.verify(tampered, pinned: try pinned(), expect: expect(platform))
+        }
     }
 }

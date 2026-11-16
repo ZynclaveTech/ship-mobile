@@ -13,8 +13,12 @@ public protocol ShipAnalyticsSink {
 ///
 /// Closures are called on the main actor only.
 public struct ShipUIOptions: @unchecked Sendable {
-    /// The URL scheme a `deeplink` action must use, e.g. `myapp`.
-    public var deeplinkScheme: String
+    /// The URL scheme a `deeplink` action must use, e.g. `myapp`: RFC 3986
+    /// scheme syntax, and not `http` or `https` (web links are `web`
+    /// actions). Anything else is a programming error and stops the app.
+    public var deeplinkScheme: String {
+        didSet { Self.checkScheme(deeplinkScheme) }
+    }
     /// A theme token (`primary`, `accent`, `surface`, `surfaceVariant`, `onSurface`,
     /// `onSurfaceVariant`, `onPrimary`) to the app's colour. Resolution order:
     /// the release's `config/theme.json` for that token (when it is in
@@ -23,12 +27,16 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// Opens a `deeplink` action through the app's own routing.
     public var openDeeplink: (URL) -> Void
     /// The language code used to look up a release's OTA strings
-    /// (`strings/<code>.json`): the app's chosen language. Default: the
-    /// device's preferred language code.
+    /// (`strings/<code>.json`): the app's chosen language. Default:
+    /// ``deviceLanguage()``, the language the app is running in.
     public var language: () -> String
     /// A text `key` to the app's own (localised) string, or `nil` to use the
     /// definition's `fallback`. Text resolves as: the release's OTA string for
     /// `language()`, then this, then the literal fallback.
+    ///
+    /// The SDK also asks it for one reserved key of its own, `common_close`:
+    /// the accessibility label of the close button on popups and cards
+    /// (default "Close").
     public var appString: (String) -> String?
     /// Last step over every text, e.g. to replace `{first_name}`. Default:
     /// drops the placeholder, as for a user with no name.
@@ -45,12 +53,28 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// considered again at the next `armSoon()`. Default: always `true`.
     public var popupPreflight: @MainActor (SDUI.Popup) async -> Bool
     /// Called when a popup that was showing closes (the person closed it, a
-    /// button closed it, or `ShipPopups.close()`). Release whatever
-    /// `popupPreflight` loaded for it. Default: nothing.
+    /// button closed it, or `ShipPopups.close()`), and for a popup
+    /// `popupPreflight` accepted that was then not shown after all. Release
+    /// whatever `popupPreflight` loaded for it. Default: nothing.
     public var onPopupClosed: (SDUI.Popup) -> Void
     public var analytics: ShipAnalyticsSink?
     /// App-registered component types, rendered from their `fields`. The keys
-    /// are the only extra `type`s the parser accepts.
+    /// are the only extra `type`s the parser accepts; a built-in type name can
+    /// never be replaced.
+    ///
+    /// A component that acts on a tap (navigates, opens something) should
+    /// first call `@Environment(\.shipComponentWillAct)`, when it is not nil:
+    /// inside a popup that closes the popup and logs `popup_action` with
+    /// `component`, inside a card it logs `sdui_tap` with `component`, exactly
+    /// as a built-in button does.
+    ///
+    ///     struct RoomTile: View {
+    ///         let node: SDUI.CustomNode
+    ///         @Environment(\.shipComponentWillAct) private var willAct
+    ///         var body: some View {
+    ///             Button("Join") { willAct?(); router.openRoom(node) }
+    ///         }
+    ///     }
     public var components: [String: (SDUI.CustomNode) -> AnyView]
     /// The bundle holding `ShipEmbedded/sdui/popups/*.json` (and the assets
     /// they name under `ShipEmbedded/`). They show without any Ship release.
@@ -76,6 +100,7 @@ public struct ShipUIOptions: @unchecked Sendable {
         embeddedPopups: Bundle? = nil,
         themeTokens: Set<String> = ShipTheme.defaultTokens
     ) {
+        Self.checkScheme(deeplinkScheme)
         self.deeplinkScheme = deeplinkScheme
         self.color = color
         self.openDeeplink = openDeeplink
@@ -94,9 +119,42 @@ public struct ShipUIOptions: @unchecked Sendable {
 }
 
 extension ShipUIOptions {
-    /// The device's preferred language code, e.g. `hi`.
+    /// The language the app is running in, as a language code, e.g. `hi`:
+    /// the first of `Bundle.main.preferredLocalizations` (the app's own
+    /// localizations matched against the person's choices, per-app language
+    /// included). An app with no localizations uses the device's first
+    /// preferred language instead; `en` if there is none.
     public static func deviceLanguage() -> String {
-        Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
+        appLanguage(bundle: .main, preferredLanguages: Locale.preferredLanguages)
+    }
+
+    static func appLanguage(bundle: Bundle, preferredLanguages: [String]) -> String {
+        func code(_ identifier: String) -> String? {
+            guard identifier != "Base" else { return nil }
+            return Locale(identifier: identifier).language.languageCode?.identifier
+        }
+        // An app with no localizations of its own reports its development
+        // region; there is no language it "runs in", so the device's is used.
+        let own = bundle.localizations.contains { $0 != "Base" }
+            ? bundle.preferredLocalizations.lazy.compactMap(code).first : nil
+        return own ?? preferredLanguages.lazy.compactMap(code).first ?? "en"
+    }
+
+    /// RFC 3986 `ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`, and not a web scheme.
+    static func isValidDeeplinkScheme(_ scheme: String) -> Bool {
+        let s = Array(scheme.unicodeScalars)
+        func alpha(_ c: Unicode.Scalar) -> Bool { ("a"..."z").contains(c) || ("A"..."Z").contains(c) }
+        guard let first = s.first, alpha(first),
+              s.allSatisfy({ alpha($0) || ("0"..."9").contains($0) || $0 == "+" || $0 == "-" || $0 == "." }) else {
+            return false
+        }
+        let lower = scheme.lowercased()
+        return lower != "http" && lower != "https"
+    }
+
+    private static func checkScheme(_ scheme: String) {
+        precondition(isValidDeeplinkScheme(scheme),
+                     "deeplinkScheme \"\(scheme)\" must be an RFC 3986 scheme (a letter, then letters, digits, +, - or .), and not http or https")
     }
 }
 
@@ -105,7 +163,7 @@ struct ShipRuntime: @unchecked Sendable {
     var options: ShipUIOptions
     var content: ShipContent?
 
-    static let none = ShipRuntime(options: ShipUIOptions(deeplinkScheme: ""), content: nil)
+    static let none = ShipRuntime(options: ShipUIOptions(deeplinkScheme: "none"), content: nil)
 
     /// Key through the release's OTA string in the app's language, then the
     /// app's own string; the literal fallback when neither has it. Then
@@ -157,19 +215,30 @@ struct ShipRuntime: @unchecked Sendable {
 
 /// Wrapped in structs so the environment does not see a bare closure.
 struct SDUIAssetResolver: Sendable {
+    /// Which files these are: a release id, or `embedded` for the app's own.
+    /// Decoded images are cached under it.
+    var releaseID: String?
     var resolve: @Sendable (String) -> URL?
     func callAsFunction(_ asset: String) -> URL? { resolve(asset) }
 }
 
-struct SDUIActionHook {
-    var run: () -> Void
-}
-
 extension EnvironmentValues {
     @Entry var shipRuntime: ShipRuntime = .none
-    /// Run before an SDUI button's action (a popup closes itself first).
-    @Entry var sduiActionWillRun: SDUIActionHook?
+    /// What a component must call just before it acts on a tap, or `nil`
+    /// outside a popup or card. Built-in buttons call it; an app-registered
+    /// component (see ``ShipUIOptions/components``) that navigates or opens
+    /// something must call it too. Inside a popup it closes the popup first,
+    /// so what the tap opens is not under it, and logs `popup_action` with
+    /// `component`; inside a card it logs `sdui_tap` with `component`.
+    public var shipComponentWillAct: (() -> Void)? {
+        get { self[ShipComponentWillActKey.self] }
+        set { self[ShipComponentWillActKey.self] = newValue }
+    }
     /// A release path (`lottie/...`, `images/...`) to its file: the applied
     /// release by default; the app bundle inside a built-in popup.
-    @Entry var sduiAssetURL = SDUIAssetResolver { _ in nil }
+    @Entry var sduiAssetURL = SDUIAssetResolver(releaseID: nil) { _ in nil }
+}
+
+private struct ShipComponentWillActKey: EnvironmentKey {
+    static var defaultValue: (() -> Void)? { nil }
 }

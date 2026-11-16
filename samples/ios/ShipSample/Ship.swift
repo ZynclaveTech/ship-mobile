@@ -91,7 +91,7 @@ final class Ship: ObservableObject {
         publish()
     }
 
-    /// Fetches the latest release, then lets popups re-check. A second call
+    /// Fetches the latest release, then lets cards and popups re-check. A second call
     /// while one is running does nothing; a cancelled sync leaves no trace.
     func sync() async {
         guard let client, !syncing else { return }
@@ -111,7 +111,16 @@ final class Ship: ObservableObject {
             status = "Sync failed: \(error.localizedDescription)"
         }
         publish()
+        cards?.refresh()
         popups?.armSoon()
+    }
+
+    /// Debug screen only: forget which popups were shown, then look again.
+    func resetPopups() {
+        guard let popups else { return }
+        popups.resetShownForDebug()
+        popups.armSoon()
+        status = "Popup memory reset"
     }
 
     var content: ShipContent? { client?.content }

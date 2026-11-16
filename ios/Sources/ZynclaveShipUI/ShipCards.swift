@@ -49,6 +49,13 @@ public final class ShipCards: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Call after a Ship sync applied a release, or when `options.eligibility`
+    /// changed: views observing this object redraw and ask ``cards(tab:now:)``
+    /// again.
+    public func refresh() {
+        objectWillChange.send()
+    }
+
     /// Reports that a card counted as seen (see `SDUIImpressionTracker`).
     public func reportImpression(_ id: String) { analytics.impression(id) }
 
@@ -103,7 +110,7 @@ public struct ShipCardView: View {
         ZStack(alignment: .topTrailing) {
             SDUINodeView(node: card.body, onDismiss: { cards.dismiss(card.id) })
                 // A button or app tile inside the card runs this first.
-                .environment(\.sduiActionWillRun, SDUIActionHook { cards.analytics.tap(card.id, target: .component) })
+                .environment(\.shipComponentWillAct, { cards.analytics.tap(card.id, target: .component) })
                 .contentShape(Rectangle())
                 .onTapGesture {
                     guard let tap = card.tap else { return }
@@ -121,6 +128,6 @@ public struct ShipCardView: View {
             }
         }
         .environment(\.shipRuntime, cards.runtime)
-        .environment(\.sduiAssetURL, SDUIAssetResolver { content?.url(for: $0) })
+        .environment(\.sduiAssetURL, SDUIAssetResolver(releaseID: content?.state?.releaseID) { content?.url(for: $0) })
     }
 }

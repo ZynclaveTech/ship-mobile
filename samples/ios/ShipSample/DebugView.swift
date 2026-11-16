@@ -13,6 +13,8 @@ struct DebugView: View {
                 if !ship.status.isEmpty { row("Status", ship.status) }
                 Button("Check now") { Task { await ship.sync() } }
                     .disabled(!ship.isConfigured || ship.syncing)
+                Button("Reset popup memory") { ship.resetPopups() }
+                    .disabled(!ship.isConfigured)
             }
             .navigationTitle("Debug")
         }

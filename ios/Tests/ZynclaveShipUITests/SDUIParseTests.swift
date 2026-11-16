@@ -185,9 +185,61 @@ final class SDUIParseTests: XCTestCase {
         guard case .custom = p.body else { return XCTFail() }
     }
 
-    func testCustomTypeCannotShadowABuiltIn() {
-        // "text" without its fallback is still invalid even if registered.
+    func testCustomTypeCannotShadowABuiltIn() throws {
+        // Built-in names are matched before the registry, so registering "text"
+        // changes nothing: the node is still parsed, and checked, as the
+        // built-in text, which needs a key or a fallback...
         XCTAssertThrowsError(try parse(card(body: ["type": "text"]), custom: ["text"]))
+        // ...and a valid one comes out as built-in text, never as a custom node.
+        let c = try parse(card(body: ["type": "text", "fallback": "x"]), custom: ["text"])
+        guard case .text = c.body else { return XCTFail("a registered built-in name became \(c.body)") }
+    }
+
+    // MARK: Shared corpus
+
+    private static let corpus = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appending(path: "testdata/sdui")
+
+    private func corpusFiles(_ dir: String) throws -> [URL] {
+        let files = try FileManager.default.contentsOfDirectory(at: Self.corpus.appending(path: dir),
+                                                                includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        XCTAssertFalse(files.isEmpty, "no files in \(dir)")
+        return files
+    }
+
+    /// The shared corpus (`testdata/sdui`), run by the Android tests too.
+    private func parseCorpus(_ url: URL) throws {
+        let data = try Data(contentsOf: url)
+        let name = url.lastPathComponent
+        let exists: (String) -> Bool = { !$0.contains("missing") }
+        if name.hasPrefix("card-") {
+            _ = try SDUI.parseCard(data, scheme: "shipsample", customTypes: ["tile"], assetExists: exists)
+        } else if name.hasPrefix("popup-") {
+            _ = try SDUI.parsePopup(data, scheme: "shipsample", customTypes: ["tile"], assetExists: exists)
+        } else {
+            XCTFail("\(name): name must start card- or popup-")
+        }
+    }
+
+    func testEveryCorpusAcceptFileParses() throws {
+        for url in try corpusFiles("accept") {
+            XCTAssertNoThrow(try parseCorpus(url), url.lastPathComponent)
+        }
+    }
+
+    func testEveryCorpusRejectFileIsRefused() throws {
+        for url in try corpusFiles("reject") {
+            XCTAssertThrowsError(try parseCorpus(url), url.lastPathComponent) { error in
+                XCTAssertTrue(error is SDUI.Invalid, url.lastPathComponent)
+            }
+        }
+    }
+
+    func testANonBooleanDismissibleKeepsTheDefault() throws {
+        let data = try Data(contentsOf: Self.corpus.appending(path: "accept/card-dismissible-number-keeps-default.json"))
+        XCTAssertTrue(try SDUI.parseCard(data, scheme: "shipsample", customTypes: [], assetExists: { _ in true }).dismissible)
     }
 
     func testCustomNodesCountTowardTheNodeLimit() {

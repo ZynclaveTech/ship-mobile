@@ -12,7 +12,8 @@ import AppKit
 /// app's own embedded ones, shown once as a modal over the app.
 ///
 /// When one may appear (all must hold):
-///  - not the first launch after install
+///  - not the first launch after install (unlike Android, an app update that
+///    first adds the SDK reads as one too: launches were never counted)
 ///  - not shown before on this device (once per popup id, ever)
 ///  - at most one popup per app session
 ///  - `options.popupGate()` allows it (the app says "no" during a call, a
@@ -114,10 +115,26 @@ public final class ShipPopups: ObservableObject {
                 Self.log.info("Popup \(candidate.id, privacy: .public) held back: preflight failed")
                 continue
             }
-            guard armed == nil, !shownThisSession else { return }
+            guard armed == nil, !shownThisSession else {
+                // Lost the race while the preflight ran: this one is not
+                // shown, so whatever the preflight loaded for it is released.
+                options.onPopupClosed(candidate)
+                return
+            }
             armed = candidate
             return
         }
+    }
+
+    /// DEBUG ONLY - never call it in a release build's normal flow. Forgets
+    /// which popups this device has shown and how many launches it has
+    /// counted, and lets this session show a popup again, so a tester can see
+    /// a popup they already dismissed: call ``armSoon()`` next. The next cold
+    /// start counts as the first launch after install again (no popup on it).
+    public func resetShownForDebug() {
+        defaults.removeObject(forKey: Self.shownKey)
+        defaults.removeObject(forKey: Self.launchesKey)
+        shownThisSession = false
     }
 
     /// Popups that may be shown now, best first (priority, then id).
@@ -158,13 +175,13 @@ public final class ShipPopups: ObservableObject {
 
     /// Where a popup's files (Lottie, images) are: Ship's release, or the app
     /// bundle for an embedded one.
-    func assetURL(for popup: SDUI.Popup) -> @Sendable (String) -> URL? {
+    func assetURL(for popup: SDUI.Popup) -> SDUIAssetResolver {
         let content = client.content
         if let embedded, embedded.popups.contains(where: { $0.id == popup.id }),
            !shipPopups().contains(where: { $0.id == popup.id }) {
-            return { embedded.url(for: $0) }
+            return SDUIAssetResolver(releaseID: "embedded") { embedded.url(for: $0) }
         }
-        return { content.url(for: $0) }
+        return SDUIAssetResolver(releaseID: content.state?.releaseID) { content.url(for: $0) }
     }
 
     private func shipPopups() -> [SDUI.Popup] {
@@ -224,8 +241,8 @@ struct ShipPopupView: View {
             ZStack(alignment: .topTrailing) {
                 ScrollView {
                     SDUINodeView(node: popup.body, onDismiss: { popups.close() })
-                        .environment(\.sduiActionWillRun, SDUIActionHook(run: componentTapped))
-                        .environment(\.sduiAssetURL, SDUIAssetResolver(resolve: popups.assetURL(for: popup)))
+                        .environment(\.shipComponentWillAct, componentTapped)
+                        .environment(\.sduiAssetURL, popups.assetURL(for: popup))
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .frame(maxHeight: 560)

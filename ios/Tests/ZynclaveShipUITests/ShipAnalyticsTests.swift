@@ -97,11 +97,29 @@ final class RecordingSink: ShipAnalyticsSink, @unchecked Sendable {
         #expect(tracker.update(fractions: ["a": 0.8], now: t0.addingTimeInterval(2.2)) == ["a"])
     }
 
-    @Test func severalCardsReportedInOrderAndDeadlineIsEarliestPending() {
+    @Test func offScreenCardsStopTheClock() {
+        var tracker = SDUIImpressionTracker()
+        _ = tracker.update(fractions: ["a": 1], now: t0)
+        _ = tracker.update(fractions: [:], now: t0.addingTimeInterval(0.5))  // the view left the screen
+        #expect(tracker.update(fractions: ["a": 1], now: t0.addingTimeInterval(1.1)) == [])
+    }
+
+    @Test func severalCardsAreTrackedApartAndReportedInOrder() {
+        var tracker = SDUIImpressionTracker()
+        _ = tracker.update(fractions: ["b": 1, "a": 1], now: t0)
+        #expect(tracker.update(fractions: ["b": 1, "a": 1, "c": 1], now: t0.addingTimeInterval(1)) == ["a", "b"])
+        #expect(tracker.update(fractions: ["c": 1], now: t0.addingTimeInterval(2)) == ["c"])
+    }
+
+    /// With no scroll events while the card sits still, the feed re-checks at
+    /// this moment so the second still counts.
+    @Test func nextDeadlineIsWhenTheEarliestPendingCardQualifies() {
         var tracker = SDUIImpressionTracker()
         #expect(tracker.nextDeadline() == nil)
-        _ = tracker.update(fractions: ["b": 1, "a": 1], now: t0)
+        _ = tracker.update(fractions: ["a": 1], now: t0)
+        _ = tracker.update(fractions: ["a": 1, "b": 1], now: t0.addingTimeInterval(0.4))
         #expect(tracker.nextDeadline() == t0.addingTimeInterval(1))
-        #expect(tracker.update(fractions: ["b": 1, "a": 1, "c": 1], now: t0.addingTimeInterval(1)) == ["a", "b"])
+        _ = tracker.update(fractions: ["a": 1, "b": 1], now: t0.addingTimeInterval(1))
+        #expect(tracker.nextDeadline() == t0.addingTimeInterval(1.4))
     }
 }

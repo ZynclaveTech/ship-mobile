@@ -41,6 +41,17 @@ import Testing
         let t = ShipTheme.parse(data(
             ##"{"primary": "#GG0000", "primary200": "#FFF", "accent": {"light": "#102030"}, "background": "#000000"}"##))
         #expect(t.isEmpty)
+        // A sign is not a hex digit, though UInt32(_:radix:) would read one.
+        for bad in ["#+12345", "-12345", "+12345", "#12 345", "#FF7A0", "#FF7A00FF"] {
+            #expect(ShipTheme.rgba(bad) == nil, "\(bad)")
+        }
+        #expect(ShipTheme.rgba("#ff7a00") != nil)
+    }
+
+    @Test func shipErrorsHaveShortMessages() {
+        #expect(ShipError.badSignature.localizedDescription == "Bad signature")
+        #expect(ShipError.http(503).localizedDescription == "HTTP 503")
+        #expect(ShipError.malformed("x").localizedDescription == "Malformed: x")
     }
 
     @Test func tokenOutsideAllowlistIgnored() async throws {

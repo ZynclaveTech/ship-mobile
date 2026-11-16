@@ -60,7 +60,10 @@ public enum ShipTheme {
     /// Strict `#RRGGBB` (or `RRGGBB`); anything else is rejected rather than guessed.
     static func rgba(_ hex: String) -> ShipRGBA? {
         let h = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+        // Six hex digits and nothing else: UInt32(_:radix:) alone also takes a
+        // sign, so "#+12345" would pass.
+        guard h.unicodeScalars.count == 6, h.unicodeScalars.allSatisfy({ $0.properties.isASCIIHexDigit }),
+              let v = UInt32(h, radix: 16) else { return nil }
         return ShipRGBA(r: Double((v >> 16) & 0xFF) / 255, g: Double((v >> 8) & 0xFF) / 255,
                         b: Double(v & 0xFF) / 255, a: 1)
     }
