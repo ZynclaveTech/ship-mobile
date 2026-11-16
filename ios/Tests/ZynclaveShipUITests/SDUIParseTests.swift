@@ -249,11 +249,20 @@ final class SDUIParseTests: XCTestCase {
 
     // MARK: Personalize
 
-    func testPersonalize() {
-        XCTAssertEqual(SDUI.personalize("Hi {first_name}!", firstName: "Ana"), "Hi Ana!")
+    func testFirstNamePlaceholder() {
+        XCTAssertEqual(SDUI.personalize("Happy Diwali, {first_name}!", firstName: "Ana"), "Happy Diwali, Ana!")
         XCTAssertEqual(SDUI.personalize("Happy Diwali, {first_name}!", firstName: nil), "Happy Diwali!")
-        XCTAssertEqual(SDUI.personalize("{first_name}, welcome", firstName: " "), "welcome")
-        XCTAssertEqual(SDUI.personalize("Hey {first_name}, claim", firstName: nil), "Hey, claim")
-        XCTAssertEqual(SDUI.personalize("No placeholder", firstName: "Ana"), "No placeholder")
+        XCTAssertEqual(SDUI.personalize("Hi {first_name}", firstName: "  "), "Hi")
+        XCTAssertEqual(SDUI.personalize("{first_name}, your gift is here", firstName: nil), "your gift is here")
+        XCTAssertEqual(SDUI.personalize("No placeholder", firstName: "A"), "No placeholder")
+        XCTAssertEqual(SDUI.personalize("{first_name} welcome back!", firstName: nil), "welcome back!")
+        XCTAssertEqual(SDUI.personalize("Hi {first_name} there", firstName: nil), "Hi there")
+        XCTAssertEqual(SDUI.personalize("Hi {first_name}!", firstName: nil), "Hi!")
+        // mid-sentence comma stays; nothing else in the text is touched
+        XCTAssertEqual(SDUI.personalize("Hey {first_name}, claim your reward", firstName: nil), "Hey, claim your reward")
+        XCTAssertEqual(SDUI.personalize("Bonjour {first_name} ! Ça va ?", firstName: nil), "Bonjour ! Ça va ?")
+        XCTAssertEqual(SDUI.personalize("Wait , {first_name}", firstName: nil), "Wait")
+        XCTAssertEqual(SDUI.personalize("{first_name}! Welcome back", firstName: nil), "Welcome back")
+        XCTAssertEqual(SDUI.personalize("{first_name}: your gift", firstName: nil), "your gift")
     }
 }
