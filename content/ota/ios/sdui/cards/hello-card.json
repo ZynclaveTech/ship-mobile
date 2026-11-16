@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "hello-card",
+  "audience": "all",
+  "start": "2026-11-01T00:00:00+00:00",
+  "end": "2030-01-01T00:00:00+00:00",
+  "placement": { "tabs": ["discover"], "position": 1 },
+  "dismissible": true,
+  "body": {
+    "type": "vstack",
+    "spacing": 8,
+    "padding": 12,
+    "cornerRadius": 16,
+    "background": { "token": "surfaceVariant" },
+    "children": [
+      { "type": "image", "src": "images/hello.png", "aspect": 2, "cornerRadius": 12 },
+      { "type": "text", "fallback": "Hello from Ship", "style": "headline" },
+      { "type": "text", "fallback": "A card placed in the feed by a release.", "style": "body", "color": { "token": "onSurfaceVariant" } },
+      { "type": "button", "label": { "fallback": "Open details" }, "style": "primary", "action": { "type": "deeplink", "url": "shipsample://details" } }
+    ]
+  }
+}

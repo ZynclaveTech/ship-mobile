@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "welcome",
+  "audience": "all",
+  "start": "2026-11-01T00:00:00+00:00",
+  "end": "2030-01-01T00:00:00+00:00",
+  "priority": 10,
+  "closeButton": true,
+  "body": {
+    "type": "vstack",
+    "spacing": 12,
+    "padding": 16,
+    "children": [
+      { "type": "lottie", "src": "lottie/wave.json", "height": 150, "loop": true },
+      { "type": "text", "fallback": "Welcome to Ship Sample", "style": "title" },
+      { "type": "text", "fallback": "This popup was delivered over the air, with no app update.", "style": "body", "color": { "token": "onSurfaceVariant" }, "maxLines": 4 },
+      { "type": "button", "label": { "fallback": "Read the docs" }, "style": "primary", "action": { "type": "web", "url": "https://ship.zynclave.com/docs" } },
+      { "type": "button", "label": { "fallback": "See details" }, "style": "secondary", "action": { "type": "deeplink", "url": "shipsample://details" } },
+      { "type": "button", "label": { "fallback": "Not now" }, "style": "text", "action": { "type": "dismiss" } }
+    ]
+  }
+}
