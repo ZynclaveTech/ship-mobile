@@ -29,23 +29,23 @@ import ZynclaveShip
                           defaults: d, observesLifecycle: false)
     }
 
-    @Test func bestPriorityFirstThenOncePerId() {
+    @Test func bestPriorityFirstThenOncePerId() async {
         let p = popups(files: [
             "sdui/popups/low.json": popupJSON(id: "low", priority: 1),
             "sdui/popups/high.json": popupJSON(id: "high", priority: 9),
         ])
         #expect(p.candidates(now: .now).map(\.id) == ["high", "low"])
-        p.arm(now: .now)
+        await p.arm(now: .now)
         #expect(p.armed?.id == "high")
         p.markShown(p.armed!)
         p.close()
         #expect(p.candidates(now: .now).map(\.id) == ["low"])
     }
 
-    @Test func shownMemoryPersistsAcrossLaunchesAndUsesTheSourceKey() {
+    @Test func shownMemoryPersistsAcrossLaunchesAndUsesTheSourceKey() async {
         let d = freshDefaults()
         let a = popups(files: ["sdui/popups/a.json": popupJSON(id: "a")], defaults: d)
-        a.arm(now: .now)
+        await a.arm(now: .now)
         a.markShown(a.armed!)
         #expect(d.stringArray(forKey: "sdui.popups.shown") == ["a"])
 
@@ -53,15 +53,15 @@ import ZynclaveShip
         #expect(relaunched.candidates(now: .now).isEmpty)
     }
 
-    @Test func atMostOnePerSession() {
+    @Test func atMostOnePerSession() async {
         let p = popups(files: [
             "sdui/popups/a.json": popupJSON(id: "a", priority: 2),
             "sdui/popups/b.json": popupJSON(id: "b", priority: 1),
         ])
-        p.arm(now: .now)
+        await p.arm(now: .now)
         p.markShown(p.armed!)
         p.close()
-        p.arm(now: .now)
+        await p.arm(now: .now)
         #expect(p.armed == nil)
     }
 
@@ -85,26 +85,60 @@ import ZynclaveShip
         #expect(popups(files: files, eligible: ["some"]).candidates(now: .now).map(\.id) == ["some", "open"])
     }
 
-    @Test func notOnTheFirstLaunchAfterInstall() {
+    @Test func notOnTheFirstLaunchAfterInstall() async {
         let d = freshDefaults()  // no launch recorded yet
         let p = ShipPopups(client: client(root: scratch(), files: ["sdui/popups/a.json": popupJSON(id: "a")]),
                            options: options(), defaults: d, observesLifecycle: false)
-        p.arm(now: .now)
+        await p.arm(now: .now)
         #expect(p.armed == nil)
         #expect(d.integer(forKey: "sdui.popups.launches") == 1)
     }
 
-    @Test func theGateHoldsAPopupBackWithoutSpendingIt() {
+    @Test func theGateHoldsAPopupBackWithoutSpendingIt() async {
         var open = false
         let p = popups(files: ["sdui/popups/a.json": popupJSON(id: "a")], gate: { open })
-        p.arm(now: .now)
+        await p.arm(now: .now)
         #expect(p.armed == nil)
         #expect(p.visiblePopup() == nil)
         open = true
-        p.arm(now: .now)
+        await p.arm(now: .now)
         #expect(p.visiblePopup()?.id == "a")
         open = false
         #expect(p.visiblePopup() == nil, "a call or live room hides it, and it is still unspent")
+    }
+
+    // MARK: Preflight
+
+    private func preflighted(_ check: @escaping (SDUI.Popup) async -> Bool, defaults: UserDefaults) -> ShipPopups {
+        defaults.set(1, forKey: "sdui.popups.launches")
+        var o = options()
+        o.popupPreflight = check
+        return ShipPopups(client: client(root: scratch(), files: [
+            "sdui/popups/a.json": popupJSON(id: "a", priority: 2),
+            "sdui/popups/b.json": popupJSON(id: "b", priority: 1),
+        ]), options: o, defaults: defaults, observesLifecycle: false)
+    }
+
+    @Test func preflightFalseHoldsPopup() async {
+        let d = freshDefaults()
+        let p = preflighted({ _ in false }, defaults: d)
+        await p.arm(now: .now)
+        #expect(p.armed == nil)
+        #expect(p.visiblePopup() == nil)
+        #expect(d.stringArray(forKey: "sdui.popups.shown") == nil, "not marked shown")
+        #expect(p.candidates(now: .now).map(\.id) == ["a", "b"], "still pending for the next sync")
+    }
+
+    @Test func aRejectedPopupDoesNotBlockTheNextOne() async {
+        let p = preflighted({ $0.id != "a" }, defaults: freshDefaults())
+        await p.arm(now: .now)
+        #expect(p.armed?.id == "b")
+    }
+
+    @Test func preflightTrueShowsPopup() async {
+        let p = preflighted({ _ in true }, defaults: freshDefaults())
+        await p.arm(now: .now)
+        #expect(p.visiblePopup()?.id == "a")
     }
 
     // MARK: Embedded

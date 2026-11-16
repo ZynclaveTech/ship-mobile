@@ -54,7 +54,7 @@ final class RecordingSink: ShipAnalyticsSink, @unchecked Sendable {
         #expect(cards.cards(tab: "discover").isEmpty)
     }
 
-    @Test func popupShownIsReportedWhenMarkedShown() {
+    @Test func popupShownIsReportedWhenMarkedShown() async {
         let sink = RecordingSink()
         var o = ShipUIOptions(deeplinkScheme: "shipsample")
         o.analytics = sink
@@ -62,7 +62,7 @@ final class RecordingSink: ShipAnalyticsSink, @unchecked Sendable {
         d.set(1, forKey: "sdui.popups.launches")
         let p = ShipPopups(client: client(root: scratch(), files: ["sdui/popups/a.json": popupJSON(id: "a")]),
                            options: o, defaults: d, observesLifecycle: false)
-        p.arm(now: .now)
+        await p.arm(now: .now)
         p.markShown(p.armed!)
         p.markShown(p.armed!)
         #expect(sink.events.map(\.0) == ["popup_shown"])

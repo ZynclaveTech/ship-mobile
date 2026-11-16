@@ -32,6 +32,11 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// Whether a popup may be on screen right now. Return `false` during a
     /// call, a live room, a lock screen, or while signed out. Default: always.
     public var popupGate: () -> Bool
+    /// Asked before a selected popup is presented, e.g. to load the live room
+    /// or community it shows. Return `false` to skip it this time: it is not
+    /// marked shown, the next best candidate is tried, and the popup is
+    /// considered again at the next `armSoon()`. Default: always `true`.
+    public var popupPreflight: (SDUI.Popup) async -> Bool
     public var analytics: ShipAnalyticsSink?
     /// App-registered component types, rendered from their `fields`. The keys
     /// are the only extra `type`s the parser accepts.
@@ -48,6 +53,7 @@ public struct ShipUIOptions: @unchecked Sendable {
         personalize: @escaping (String) -> String = { $0 },
         eligibility: @escaping () -> (cards: Set<String>, popups: Set<String>) = { ([], []) },
         popupGate: @escaping () -> Bool = { true },
+        popupPreflight: @escaping (SDUI.Popup) async -> Bool = { _ in true },
         analytics: ShipAnalyticsSink? = nil,
         components: [String: (SDUI.CustomNode) -> AnyView] = [:],
         embeddedPopups: Bundle? = nil
@@ -59,6 +65,7 @@ public struct ShipUIOptions: @unchecked Sendable {
         self.personalize = personalize
         self.eligibility = eligibility
         self.popupGate = popupGate
+        self.popupPreflight = popupPreflight
         self.analytics = analytics
         self.components = components
         self.embeddedPopups = embeddedPopups

@@ -74,7 +74,8 @@ public final class ShipPopups: ObservableObject {
     /// Call it after every Ship sync.
     public func armSoon() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.arm(now: .now)
+            guard let self else { return }
+            Task { @MainActor in await self.arm(now: .now) }
         }
     }
 
@@ -84,10 +85,27 @@ public final class ShipPopups: ObservableObject {
     /// Tell the popup host the gate may have changed (a call ended).
     public func gateChanged() { objectWillChange.send() }
 
-    func arm(now: Date) {
-        guard armed == nil, !shownThisSession, !isFirstLaunch, options.popupGate(),
-              let best = candidates(now: now).first else { return }
-        armed = best
+    private var preflighting = false
+
+    /// A popup is spent the moment it appears, so the app's `popupPreflight`
+    /// runs FIRST. A candidate it rejects is skipped without being marked
+    /// seen (the next `armSoon()` tries again) and does not block the ones
+    /// after it.
+    func arm(now: Date) async {
+        guard armed == nil, !shownThisSession, !preflighting, !isFirstLaunch, options.popupGate() else { return }
+        let list = candidates(now: now)
+        guard !list.isEmpty else { return }
+        preflighting = true
+        defer { preflighting = false }
+        for candidate in list {
+            guard await options.popupPreflight(candidate) else {
+                Self.log.info("Popup \(candidate.id, privacy: .public) held back: preflight failed")
+                continue
+            }
+            guard armed == nil, !shownThisSession else { return }
+            armed = candidate
+            return
+        }
     }
 
     /// Popups that may be shown now, best first (priority, then id).
