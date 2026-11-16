@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.maven.publish)
 }
 
 android {
@@ -26,6 +28,11 @@ android {
     }
 }
 
+androidComponents {
+    // The unit tests run against the debug variant, which carries the Compose test manifest.
+    beforeVariants(selector().withBuildType("release")) { it.hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = false }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
@@ -37,5 +44,23 @@ dependencies {
     // JsonObject appears in the public API (Node.Custom).
     api(libs.kotlinx.serialization.json)
 
+    // Appear in the public API: Modifier, Color, @Composable, StateFlow, LottieCompositionResult.
+    api(platform(libs.compose.bom))
+    api(libs.compose.ui)
+    api(libs.coroutines.core)
+    api(libs.lottie.compose)
+
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.lifecycle.runtime.compose)
+
     testImplementation(libs.junit)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
