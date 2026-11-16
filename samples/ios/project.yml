@@ -1,0 +1,47 @@
+# Generate the Xcode project with `xcodegen`. The generated ShipSample.xcodeproj
+# is committed, so you only need xcodegen if you change this file.
+name: ShipSample
+options:
+  bundleIdPrefix: com.zynclave
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  ZynclaveShip:
+    path: ../..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+targets:
+  ShipSample:
+    type: application
+    platform: iOS
+    sources:
+      - path: ShipSample
+        excludes: ["Info.plist"]
+      # A folder reference: copied into the bundle as ShipEmbedded/.
+      - path: ShipSample/ShipEmbedded
+        type: folder
+    dependencies:
+      - package: ZynclaveShip
+        product: ZynclaveShip
+      - package: ZynclaveShip
+        product: ZynclaveShipUI
+    info:
+      path: ShipSample/Info.plist
+      properties:
+        CFBundleDisplayName: Ship Sample
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.zynclave.shipsample
+            CFBundleURLSchemes: [shipsample]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zynclave.shipsample
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"

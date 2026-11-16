@@ -12,3 +12,6 @@ build/
 *.jks
 .netrc
 Package.resolved
+# Xcode build output
+*.xcarchive
+*.dSYM/
