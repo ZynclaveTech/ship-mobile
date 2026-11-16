@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "spring-promo",
+  "audience": "targeted",
+  "placement": {
+    "tabs": [
+      "discover"
+    ],
+    "position": 3
+  },
+  "body": {
+    "type": "vstack",
+    "children": [
+      {
+        "type": "image",
+        "src": "images/banner.png",
+        "aspect": 2
+      },
+      {
+        "type": "text",
+        "key": "promo_title",
+        "fallback": "Spring",
+        "style": "title"
+      },
+      {
+        "type": "button",
+        "label": {
+          "fallback": "Open"
+        },
+        "action": {
+          "type": "deeplink",
+          "url": "shipsample://rewards"
+        }
+      }
+    ]
+  },
+  "start": "2026-01-01T00:00:00Z"
+}

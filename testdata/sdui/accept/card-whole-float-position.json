@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "spring-promo",
+  "audience": "all",
+  "placement": {
+    "tabs": [
+      "discover",
+      "following"
+    ],
+    "position": 3.0,
+    "priority": 2
+  },
+  "body": {
+    "type": "vstack",
+    "children": [
+      {
+        "type": "image",
+        "src": "images/banner.png",
+        "aspect": 2
+      },
+      {
+        "type": "text",
+        "key": "promo_title",
+        "fallback": "Spring",
+        "style": "title"
+      },
+      {
+        "type": "button",
+        "label": {
+          "fallback": "Open"
+        },
+        "action": {
+          "type": "deeplink",
+          "url": "shipsample://rewards"
+        }
+      }
+    ]
+  }
+}

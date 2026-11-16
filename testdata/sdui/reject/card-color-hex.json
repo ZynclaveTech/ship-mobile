@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "spring-promo",
+  "audience": "all",
+  "placement": {
+    "tabs": [
+      "discover"
+    ],
+    "position": 3
+  },
+  "body": {
+    "type": "text",
+    "fallback": "x",
+    "color": "#FF0000"
+  }
+}
