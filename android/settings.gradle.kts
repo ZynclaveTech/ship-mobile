@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 rootProject.name = "zynclave-ship-android"
 include(":ship-core")
 include(":ship-ui")
+include(":sample")
+project(":sample").projectDir = file("../samples/android")
