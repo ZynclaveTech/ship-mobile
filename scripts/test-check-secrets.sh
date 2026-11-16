@@ -147,15 +147,111 @@ echo x > "$repo/x.txt"; git -C "$repo" add -A
 git -C "$repo" commit -q -m "uses arn:aws:iam::1:role/x"
 expect_fail "secret in commit message"
 
-# The script's own two files are the only exclusions.
+# The script's own two files are excluded from the GENERIC patterns only.
+# (This test file spells the stand-in denylist above, so this case runs with a
+# denylist that matches nothing in it.)
+nothing_denylist="$work/nothing-denylist"
+printf '%s%s\n' 'zz-no-such' '-value-zz' > "$nothing_denylist"  # in pieces, so this file does not spell it
 new_repo
 mkdir -p "$repo/scripts"
 cp "$here/check-secrets.sh" "$here/test-check-secrets.sh" "$repo/scripts/"
 git -C "$repo" add -A
 git -C "$repo" commit -q -m "add scripts"
-expect_pass "repo holding only the two script files"
-commit_file "$repo" "scripts/other.sh" "test-kid-2099-01"
-expect_fail "another file under scripts/"
+if SHIP_DENYLIST="$nothing_denylist" "$check" "$repo" >/dev/null 2>&1; then
+  echo "ok:   repo holding only the two script files"
+else
+  echo "FAIL: the two script files tripped the generic patterns"; failures=$((failures + 1))
+fi
+commit_file "$repo" "scripts/other.sh" "arn:aws:iam::1:role/x"
+if SHIP_DENYLIST="$nothing_denylist" "$check" "$repo" >/dev/null 2>&1; then
+  echo "FAIL: another file under scripts/ was not flagged"; failures=$((failures + 1))
+else
+  echo "ok:   another file under scripts/ flagged"
+fi
+
+# Denylist patterns run with no exclusions: a private value in the script
+# itself, now or only in its history, is flagged.
+new_repo
+commit_file "$repo" "scripts/check-secrets.sh" "# test-kid-2099-01"
+expect_fail "denylist entry inside scripts/check-secrets.sh"
+new_repo
+commit_file "$repo" "scripts/test-check-secrets.sh" "planted fakeapp"
+git -C "$repo" rm -q scripts/test-check-secrets.sh
+git -C "$repo" commit -q -m "remove it"
+expect_fail "denylist entry only in the history of scripts/test-check-secrets.sh"
+
+# A secret far back in a long history: committed, deleted, then buried under
+# well over 64 KB of later diffs. A `printf | grep -q` pipe under pipefail
+# reported this as clean.
+new_repo
+commit_file "$repo" "old.txt" "arn:aws:iam::1:role/x"
+git -C "$repo" rm -q old.txt
+git -C "$repo" commit -q -m "remove it"
+for k in 1 2 3; do
+  awk -v k="$k" 'BEGIN { for (i = 0; i < 4000; i++) printf "line %d of filler %d, nothing secret here\n", i, k }' \
+    > "$repo/filler$k.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -q -m "filler $k"
+done
+size="$(git -C "$repo" log -p | wc -c | tr -d ' ')"
+if [ "$size" -lt 200000 ]; then
+  echo "FAIL: the long history is only $size bytes"; failures=$((failures + 1))
+fi
+expect_fail "secret behind $size bytes of later history"
+# The other order, the one that tripped the old pipe: well over 64 KB of OLDER
+# history, then a secret committed and deleted. The deletion is near the top of
+# `git log -p`, so grep -q matches early and stops reading the rest.
+new_repo
+for k in 1 2 3; do
+  awk -v k="$k" 'BEGIN { for (i = 0; i < 4000; i++) printf "line %d of filler %d, nothing secret here\n", i, k }' \
+    > "$repo/filler$k.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -q -m "filler $k"
+done
+commit_file "$repo" "late.txt" "arn:aws:iam::1:role/x"
+git -C "$repo" rm -q late.txt
+git -C "$repo" commit -q -m "remove it"
+expect_fail "deleted secret with over 64 KB of older history after it"
+new_repo
+awk 'BEGIN { for (i = 0; i < 12000; i++) printf "line %d, nothing secret here\n", i }' > "$repo/filler.txt"
+git -C "$repo" add -A
+git -C "$repo" commit -q -m "filler"
+commit_file "$repo" "late.txt" "fakeapp"
+git -C "$repo" rm -q late.txt
+git -C "$repo" commit -q -m "remove it"
+expect_fail "deleted denylist entry with over 64 KB of older history after it"
+new_repo
+commit_file "$repo" "old.txt" "fakeapp"
+git -C "$repo" rm -q old.txt
+git -C "$repo" commit -q -m "remove it"
+awk 'BEGIN { for (i = 0; i < 12000; i++) printf "line %d, nothing secret here\n", i }' > "$repo/filler.txt"
+git -C "$repo" add -A
+git -C "$repo" commit -q -m "filler"
+expect_fail "denylist entry behind a long history"
+
+# Every ref is scanned, not only the checked-out branch.
+new_repo
+git -C "$repo" checkout -q -b side
+commit_file "$repo" "side.txt" "arn:aws:iam::1:role/x"
+git -C "$repo" checkout -q -
+expect_fail "secret only on another branch"
+new_repo
+git -C "$repo" checkout -q -b side
+echo x > "$repo/m.txt"; git -C "$repo" add -A
+git -C "$repo" commit -q -m "mentions FakeApp"
+git -C "$repo" checkout -q -
+expect_fail "denylist entry only in a commit message on another branch"
+
+# An invalid denylist regex fails loudly, naming its line, never as "ok".
+bad_denylist="$work/bad-denylist"
+printf '%s\n' '# comment' 'fakeapp' 'unclosed(' > "$bad_denylist"
+new_repo
+out="$(SHIP_DENYLIST="$bad_denylist" "$check" "$repo" 2>&1)" && rc=0 || rc=$?
+if [ "$rc" -eq 2 ] && printf '%s\n' "$out" | grep -q "invalid regex on line 3"; then
+  echo "ok:   invalid denylist regex exits 2 naming line 3"
+else
+  echo "FAIL: invalid denylist regex gave rc=$rc: $out"; failures=$((failures + 1))
+fi
 
 # Clean repo passes; the placeholder only warns.
 new_repo
