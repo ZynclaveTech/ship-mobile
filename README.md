@@ -36,6 +36,10 @@ passes `ship validate` is one an outside app can show.
 3. Run again and tap Check now. The app shows the sample release: a welcome popup,
    a hello card, strings, flags and a theme colour.
 
+The welcome popup is held back on the first launch after install, so you see it from the
+second launch on, and it shows once per id per device. To see it again, use **Reset popup
+memory** on the Debug screen.
+
 A debug build reads the `testflight` channel and a store build reads `production`.
 
 ## Run the Android sample
@@ -44,7 +48,8 @@ A debug build reads the `testflight` channel and a store build reads `production
 2. As on iOS, the sample shows **"Ship is not configured"** until you replace its
    placeholder key. The key is one constant, `SAMPLE_PUBLIC_KEY` in
    `samples/android/src/main/kotlin/com/zynclave/shipsample/Ship.kt`.
-3. Run it and tap Check now to see the same sample release.
+3. Run it and tap Check now to see the same sample release. The welcome popup follows the
+   same rules as on iOS: not on the first launch after install, once per id per device.
 
 Debug builds read `testflight`, release builds read `production`.
 
@@ -95,7 +100,7 @@ val config = ShipConfig(
     channel = channel,       // "testflight" in debug, "production" otherwise
     runtime = runtime,       // "android-" + versionName
     pinned = listOf(key),    // PinnedKey.of(kid, base64)
-    bucket = stableBucket(context),
+    bucket = ShipConfig.stableBucket(context),
 )
 val client = ShipClient(config, File(context.filesDir, "ship"))
 val options = ShipUiOptions(deeplinkScheme = "shipsample", openDeeplink = ::open)
@@ -106,10 +111,10 @@ val popups = ShipPopups(context, client, options)
 Your host app has a few jobs:
 
 - Call `client.sync()` when you want fresh content (for example at launch and on foreground).
-- After every sync, call `popups.armSoon()`. On Android, also call `ShipCards.refresh()`
-  (the client has no change signal).
+- After every sync, call `popups.armSoon()` and `cards.refresh()` (the client has no
+  change signal of its own).
 - Create **one** `ShipPopups` per process. Two would each keep their own state and show the same popup twice.
-- When the signed-in user's eligibility changes, call `ShipCards.refresh()` on Android. iOS has no such call: `cards(tab:)` is computed each time you ask.
+- When the signed-in user's eligibility changes, call `cards.refresh()`.
 - Pass what only your app knows through `ShipUIOptions` / `ShipUiOptions`: `eligibility`,
   `popupGate`, `appString`, `personalize`, `analytics`, `color` and `language`.
 
@@ -170,7 +175,10 @@ limited to 500 characters. Colours are theme tokens, never hex values.
 
 **Custom components.** The SDK lets an app register its own component types, but
 `ship validate` accepts only the built-ins for workspaces outside Zynclave. Custom
-components are not yet available to outside workspaces.
+components are not yet available to outside workspaces. A registered component that acts
+on a tap must first call `@Environment(\.shipComponentWillAct)` (iOS) or
+`LocalShipComponentWillAct.current` (Android), when it is not null: that closes the popup
+and logs the tap, as a built-in button does.
 
 **Theme.** `config/theme.json` overrides the colour tokens `primary`, `accent`,
 `surface`, `surfaceVariant`, `onSurface`, `onSurfaceVariant` and `onPrimary`:
@@ -186,7 +194,9 @@ which names a release may override.
 **Cards.** A card's `placement.tabs` names the tabs it appears on: `discover`,
 `following`. Your app tells the SDK which tab a list is by asking `cards(tab:)` for it.
 
-**Popups.** A popup shows once per id per device.
+**Popups.** A popup is held back on the first launch after install, and shows once per id
+per device, at most one per app session. `ShipPopups.resetShownForDebug()` forgets what
+was shown; it is for debug screens only.
 
 ## Publish and see it
 
@@ -210,10 +220,12 @@ Then open the app and sync: the new content shows without a store release.
 
 ## Known differences between iOS and Android
 
-- On iOS a Lottie is fitted into a square as tall as its `height`. On Android it fills
-  the width. Keep animations close to square and they look the same on both.
-- Text inside a Lottie file is not translated.
-- A popup shows once per id per device.
+- Text inside a Lottie file is not translated, on either platform.
+- First launch: Android treats the first launch after an app update as not a first launch,
+  so an update that adds the SDK can show a popup at once. iOS counts it as a first launch
+  and holds popups back until the next one.
+- Integer flags: `ShipFlags.int` reads 32-bit integers on Android and 64-bit on iOS. A
+  value outside the 32-bit range is no override on Android.
 
 ## Store rules
 
