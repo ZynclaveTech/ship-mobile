@@ -38,6 +38,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.zynclave.ship.ShipClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,12 +96,10 @@ class ShipPopups internal constructor(
     /** `options.popupGate()` as last read: on [gateChanged] and each time a popup is armed. */
     internal val gateOpen: StateFlow<Boolean> = gate.asStateFlow()
 
-    @Volatile private var shownThisSession = false
     private val preflighting = AtomicBoolean(false)
 
-    // Counted once per process, the first time a popup is considered - a
-    // process started for background work alone is not a launch.
-    private var firstLaunch: Boolean? = null
+    // Process-wide ([Process]): recreating this object (an Activity restart)
+    // must not count a launch or allow a second popup this session.
 
     private var shipCache: Pair<String?, List<Sdui.Popup>>? = null
     private var embedded: ShipEmbedded? = null
@@ -144,17 +143,28 @@ class ShipPopups internal constructor(
      * (the next [armSoon] tries again) and does not block the ones after it.
      */
     internal suspend fun arm(now: Instant) {
+        // Counted up front, before the gate: a process whose gate never opens
+        // is still a launch.
+        if (Process.firstLaunch == null) withContext(io) { isFirstLaunch() }
         gate.value = options.popupGate()
-        if (armed.value != null || shownThisSession || !gate.value) return
+        if (armed.value != null || Process.shownThisSession || !gate.value) return
         if (!preflighting.compareAndSet(false, true)) return
         try {
             val list = withContext(io) { if (isFirstLaunch()) emptyList() else candidates(now) }
             for (candidate in list) {
-                if (!options.popupPreflight(candidate)) {
+                val accepted = try {
+                    options.popupPreflight(candidate)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Log.w(LOG_TAG, "Popup ${candidate.id} preflight threw; treated as false", e)
+                    false
+                }
+                if (!accepted) {
                     Log.i(LOG_TAG, "Popup ${candidate.id} held back: preflight failed")
                     continue
                 }
-                if (armed.value != null || shownThisSession) return
+                if (armed.value != null || Process.shownThisSession) return
                 armed.value = candidate
                 return
             }
@@ -169,9 +179,9 @@ class ShipPopups internal constructor(
 
     /** The popup is on screen: it counts as seen from here, whatever the person does next. */
     internal fun markShown(popup: Sdui.Popup) {
-        synchronized(this) {
-            if (shownThisSession) return
-            shownThisSession = true
+        synchronized(Process) {
+            if (Process.shownThisSession) return
+            Process.shownThisSession = true
             prefs.edit().putStringSet(SHOWN, shown() + popup.id).apply()
         }
         analytics.popupShown(popup.id)
@@ -186,14 +196,16 @@ class ShipPopups internal constructor(
 
     private fun shown(): Set<String> = prefs.getStringSet(SHOWN, null).orEmpty().toSet()
 
-    private fun isFirstLaunch(): Boolean = firstLaunch ?: run {
+    private fun isFirstLaunch(): Boolean = Process.firstLaunch ?: synchronized(Process) {
+      Process.firstLaunch ?: run {
         val launches = prefs.getInt(LAUNCHES, 0) + 1
         prefs.edit().putInt(LAUNCHES, launches).apply()
         // Only a new install's first launch. An app that gained popups in an
         // update never counted launches before, so an update would otherwise
         // read as a first launch too and hold the popup back a whole session
         // from people who have used the app.
-        (launches <= 1 && !installWasUpdated(app)).also { firstLaunch = it }
+        (launches <= 1 && !installWasUpdated(app)).also { Process.firstLaunch = it }
+      }
     }
 
     /** Ship's popups, then the app's own; Ship's win a shared id. */
@@ -244,6 +256,20 @@ class ShipPopups internal constructor(
         }
         shipCache = state.releaseId to out
         return out
+    }
+
+    /** State that lives as long as the process, as the source's singleton did. */
+    internal object Process {
+        @Volatile var shownThisSession = false
+
+        // Counted once per process - a process started for background work alone is not a launch.
+        @Volatile var firstLaunch: Boolean? = null
+
+        /** Tests only: a fresh process. */
+        fun reset() {
+            shownThisSession = false
+            firstLaunch = null
+        }
     }
 
     internal companion object {

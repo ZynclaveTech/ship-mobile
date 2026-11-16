@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.zynclave.ship.ShipContent
+import com.zynclave.ship.ShipStrings
 import com.zynclave.ship.ShipTheme
 import java.util.Locale
 
@@ -96,7 +97,7 @@ data class ShipUiOptions(
 )
 
 /** The device's primary language code, e.g. `hi`. */
-internal fun deviceLanguage(): String = Locale.getDefault().language.ifEmpty { "en" }
+internal fun deviceLanguage(): String = ShipStrings.releaseLanguage(Locale.getDefault().language.ifEmpty { "en" })
 
 /** What a rendered definition needs from its host, passed down the composition. */
 internal class ShipRuntime(

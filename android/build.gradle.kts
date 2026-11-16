@@ -7,6 +7,22 @@ plugins {
 
 val shipVersion = "0.1.0"
 
+val signingConfigured = listOf("signingInMemoryKey", "signing.keyId", "signing.gnupg.keyName")
+    .any { providers.gradleProperty(it).isPresent }
+
+// Maven Central uploads must be signed: fail before anything runs, not after a rejected upload.
+// publishToMavenLocal is unaffected.
+gradle.taskGraph.whenReady {
+    val central = allTasks.firstOrNull { it.name.startsWith("publish") && it.name.contains("MavenCentral") }
+    if (central != null && !signingConfigured) {
+        throw GradleException(
+            "${central.path}: no signing key configured. Set signingInMemoryKey (and signingInMemoryKeyPassword) " +
+                "or signing.keyId in ~/.gradle/gradle.properties or ORG_GRADLE_PROJECT_* environment variables. " +
+                "publishToMavenLocal works without one.",
+        )
+    }
+}
+
 subprojects {
     plugins.withId("com.vanniktech.maven.publish") {
         extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
@@ -48,8 +64,6 @@ subprojects {
             // variables, e.g. ~/.gradle/gradle.properties. With no key configured the
             // artifacts are left unsigned, so publishToMavenLocal works anywhere.
             publishToMavenCentral()
-            val signingConfigured = listOf("signingInMemoryKey", "signing.keyId", "signing.gnupg.keyName")
-                .any { providers.gradleProperty(it).isPresent }
             if (signingConfigured) signAllPublications()
         }
     }

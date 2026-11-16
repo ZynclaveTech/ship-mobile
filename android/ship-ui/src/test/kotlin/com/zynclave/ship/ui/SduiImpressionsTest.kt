@@ -112,6 +112,7 @@ class ShipAnalyticsTest {
     @Before
     fun clean() {
         app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).edit().clear().commit()
+        ShipPopups.Process.reset()
     }
 
     private val options = ShipUiOptions(deeplinkScheme = TEST_SCHEME, openDeeplink = {}, analytics = sink)

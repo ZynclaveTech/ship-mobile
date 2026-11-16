@@ -55,6 +55,7 @@ class ShipPopupsTest {
     @Before
     fun fresh() {
         app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).edit().clear().commit()
+        ShipPopups.Process.reset()
     }
 
     private fun popup(id: String, priority: Int = 0, body: String = """{"type": "text", "fallback": "Hello $id"}""") =
@@ -107,9 +108,46 @@ class ShipPopupsTest {
         arm(first)
         assertNull(first.current.value)
 
+        ShipPopups.Process.reset() // the next process
         val next = popups(client)
         arm(next)
         assertEquals("hello", next.current.value?.id)
+    }
+
+    @Test
+    fun `secondInstanceInSameProcessKeepsSessionRules`() {
+        val client = testClient(temp.newFolder(), "r1", mapOf(popup("a", 5), popup("b", 1)))
+        val prefs = app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE)
+        secondLaunch()
+        val a = popups(client)
+        arm(a)
+        a.markShown(a.current.value!!)
+        a.close()
+        assertEquals(2, prefs.getInt("popups_launches", 0))
+
+        val b = popups(client) // an Activity restart: a new instance, the same process
+        arm(b)
+        assertEquals("no second launch counted", 2, prefs.getInt("popups_launches", 0))
+        assertNull("one popup per session, across instances", b.current.value)
+    }
+
+    @Test
+    fun `a process whose gate never opens still counts its launch`() {
+        val p = popups(testClient(temp.newFolder(), "r1", mapOf(popup("a"))), options(gate = { false }))
+        arm(p)
+        assertEquals(1, app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).getInt("popups_launches", 0))
+        arm(p)
+        assertEquals("once per process", 1, app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).getInt("popups_launches", 0))
+    }
+
+    @Test
+    fun `throwingPreflightIsTreatedAsFalse`() {
+        secondLaunch()
+        val client = testClient(temp.newFolder(), "r1", mapOf(popup("first", 5), popup("second", 1)))
+        val p = popups(client, options(preflight = { if (it.id == "first") error("boom") else true }))
+        arm(p)
+        assertEquals("the throwing popup is skipped, the next is tried", "second", p.current.value?.id)
+        assertNull(app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).getStringSet("popups_shown", null))
     }
 
     @Test
@@ -134,6 +172,7 @@ class ShipPopupsTest {
         assertEquals(listOf("popup_shown"), sink.names)
         assertEquals(setOf("high"), app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).getStringSet("popups_shown", null))
 
+        ShipPopups.Process.reset()
         val next = popups(client) // the next process: "high" is spent
         arm(next)
         assertEquals("low", next.current.value?.id)

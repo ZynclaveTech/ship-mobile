@@ -123,9 +123,25 @@ class ShipViewsTest {
     }
 
     @Test
+    fun defaultLanguageMapsLegacyCodes() {
+        val saved = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale("in"))
+            val default = ShipUiOptions(deeplinkScheme = TEST_SCHEME, openDeeplink = {})
+            assertEquals("id", default.language())
+            val client = testClient(temp.newFolder(), "r1", mapOf("strings/id.json" to text("""{"title": "OTA indonesian"}""")))
+            assertEquals("OTA indonesian", ShipRuntime(default, client.content).text(Sdui.TextValue("title", "literal")))
+            java.util.Locale.setDefault(java.util.Locale("iw"))
+            assertEquals("he", default.language())
+        } finally {
+            java.util.Locale.setDefault(saved)
+        }
+    }
+
+    @Test
     fun `the default language is the device's`() {
         val default = ShipUiOptions(deeplinkScheme = TEST_SCHEME, openDeeplink = {})
-        assertEquals(java.util.Locale.getDefault().language.ifEmpty { "en" }, default.language())
+        assertEquals(com.zynclave.ship.ShipStrings.releaseLanguage(java.util.Locale.getDefault().language.ifEmpty { "en" }), default.language())
     }
 
     @Test
