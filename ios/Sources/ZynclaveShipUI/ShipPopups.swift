@@ -70,20 +70,32 @@ public final class ShipPopups: ObservableObject {
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
-    /// Re-evaluated 1.5 s from now, so the first frame belongs to the app.
-    /// Call it after every Ship sync.
+    /// Seconds `armSoon()` waits, so the first frame belongs to the app.
+    var armDelay: TimeInterval = 1.5
+
+    /// Re-evaluated shortly from now. Call it after every Ship sync.
     public func armSoon() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + armDelay) { [weak self] in
             guard let self else { return }
             Task { @MainActor in await self.arm(now: .now) }
         }
     }
 
-    /// Dismisses the armed popup (the host's own close, e.g. on sign-out).
-    public func close() { armed = nil }
+    /// Dismisses the armed popup (the host's own close, e.g. on sign-out) and
+    /// reports it through `options.onPopupClosed`.
+    public func close() {
+        guard let popup = armed else { return }
+        armed = nil
+        options.onPopupClosed(popup)
+    }
 
-    /// Tell the popup host the gate may have changed (a call ended).
-    public func gateChanged() { objectWillChange.send() }
+    /// Tell the popup host the gate may have changed (a call ended). Hides or
+    /// shows an already armed popup, and also calls `armSoon()`, so a popup
+    /// that was held back while the gate was closed is armed now.
+    public func gateChanged() {
+        objectWillChange.send()
+        armSoon()
+    }
 
     private var preflighting = false
 

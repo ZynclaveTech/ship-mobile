@@ -109,7 +109,7 @@ import ZynclaveShip
 
     // MARK: Preflight
 
-    private func preflighted(_ check: @escaping (SDUI.Popup) async -> Bool, defaults: UserDefaults) -> ShipPopups {
+    private func preflighted(_ check: @escaping @MainActor (SDUI.Popup) async -> Bool, defaults: UserDefaults) -> ShipPopups {
         defaults.set(1, forKey: "sdui.popups.launches")
         var o = options()
         o.popupPreflight = check
@@ -139,6 +139,36 @@ import ZynclaveShip
         let p = preflighted({ _ in true }, defaults: freshDefaults())
         await p.arm(now: .now)
         #expect(p.visiblePopup()?.id == "a")
+    }
+
+    @Test func gateReopenedArmsHeldPopup() async throws {
+        var open = false
+        let p = popups(files: ["sdui/popups/a.json": popupJSON(id: "a")], gate: { open })
+        p.armDelay = 0
+        p.armSoon()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(p.armed == nil)
+        open = true
+        p.gateChanged()
+        for _ in 0..<50 where p.armed == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(p.visiblePopup()?.id == "a")
+    }
+
+    @Test func closeCallsOnPopupClosed() async {
+        var closed: [String] = []
+        var o = options()
+        o.onPopupClosed = { closed.append($0.id) }
+        let d = freshDefaults()
+        d.set(1, forKey: "sdui.popups.launches")
+        let p = ShipPopups(client: client(root: scratch(), files: ["sdui/popups/a.json": popupJSON(id: "a")]),
+                           options: o, defaults: d, observesLifecycle: false)
+        p.close()
+        #expect(closed.isEmpty, "nothing was showing")
+        await p.arm(now: .now)
+        p.close()
+        p.close()
+        #expect(closed == ["a"])
+        #expect(p.armed == nil)
     }
 
     // MARK: Embedded

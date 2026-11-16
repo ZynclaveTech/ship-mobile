@@ -21,10 +21,16 @@ public struct ShipUIOptions: @unchecked Sendable {
     public var color: (String) -> Color?
     /// Opens a `deeplink` action through the app's own routing.
     public var openDeeplink: (URL) -> Void
+    /// The language code used to look up a release's OTA strings
+    /// (`strings/<code>.json`): the app's chosen language. Default: the
+    /// device's preferred language code.
+    public var language: () -> String
     /// A text `key` to the app's own (localised) string, or `nil` to use the
-    /// definition's `fallback`. A release's OTA string for the key wins first.
+    /// definition's `fallback`. Text resolves as: the release's OTA string for
+    /// `language()`, then this, then the literal fallback.
     public var appString: (String) -> String?
-    /// Last step over every text, e.g. to replace `{first_name}`. Default: identity.
+    /// Last step over every text, e.g. to replace `{first_name}`. Default:
+    /// drops the placeholder, as for a user with no name.
     public var personalize: (String) -> String
     /// The ids the backend listed for the signed-in user. Targeted cards and
     /// popups show only when named here, so the default shows none of them.
@@ -36,7 +42,11 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// or community it shows. Return `false` to skip it this time: it is not
     /// marked shown, the next best candidate is tried, and the popup is
     /// considered again at the next `armSoon()`. Default: always `true`.
-    public var popupPreflight: (SDUI.Popup) async -> Bool
+    public var popupPreflight: @MainActor (SDUI.Popup) async -> Bool
+    /// Called when a popup that was showing closes (the person closed it, a
+    /// button closed it, or `ShipPopups.close()`). Release whatever
+    /// `popupPreflight` loaded for it. Default: nothing.
+    public var onPopupClosed: (SDUI.Popup) -> Void
     public var analytics: ShipAnalyticsSink?
     /// App-registered component types, rendered from their `fields`. The keys
     /// are the only extra `type`s the parser accepts.
@@ -49,11 +59,13 @@ public struct ShipUIOptions: @unchecked Sendable {
         deeplinkScheme: String,
         color: @escaping (String) -> Color? = { _ in nil },
         openDeeplink: @escaping (URL) -> Void = { _ in },
+        language: @escaping () -> String = ShipUIOptions.deviceLanguage,
         appString: @escaping (String) -> String? = { _ in nil },
-        personalize: @escaping (String) -> String = { $0 },
+        personalize: @escaping (String) -> String = { SDUI.personalize($0, firstName: nil) },
         eligibility: @escaping () -> (cards: Set<String>, popups: Set<String>) = { ([], []) },
         popupGate: @escaping () -> Bool = { true },
-        popupPreflight: @escaping (SDUI.Popup) async -> Bool = { _ in true },
+        popupPreflight: @escaping @MainActor (SDUI.Popup) async -> Bool = { _ in true },
+        onPopupClosed: @escaping (SDUI.Popup) -> Void = { _ in },
         analytics: ShipAnalyticsSink? = nil,
         components: [String: (SDUI.CustomNode) -> AnyView] = [:],
         embeddedPopups: Bundle? = nil
@@ -61,14 +73,23 @@ public struct ShipUIOptions: @unchecked Sendable {
         self.deeplinkScheme = deeplinkScheme
         self.color = color
         self.openDeeplink = openDeeplink
+        self.language = language
         self.appString = appString
         self.personalize = personalize
         self.eligibility = eligibility
         self.popupGate = popupGate
         self.popupPreflight = popupPreflight
+        self.onPopupClosed = onPopupClosed
         self.analytics = analytics
         self.components = components
         self.embeddedPopups = embeddedPopups
+    }
+}
+
+extension ShipUIOptions {
+    /// The device's preferred language code, e.g. `hi`.
+    public static func deviceLanguage() -> String {
+        Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
     }
 }
 
@@ -79,8 +100,9 @@ struct ShipRuntime: @unchecked Sendable {
 
     static let none = ShipRuntime(options: ShipUIOptions(deeplinkScheme: ""), content: nil)
 
-    /// Key through the release's OTA strings, then the app's own; the
-    /// fallback when neither has it. Then `personalize`.
+    /// Key through the release's OTA string in the app's language, then the
+    /// app's own string; the literal fallback when neither has it. Then
+    /// `personalize`.
     func text(_ v: SDUI.TextValue) -> String {
         var text = v.fallback ?? ""
         if let key = v.key {
@@ -95,8 +117,7 @@ struct ShipRuntime: @unchecked Sendable {
 
     private func otaString(_ key: String) -> String? {
         guard let content, content.state?.revertToEmbedded == false else { return nil }
-        let language = Locale.current.language.languageCode?.identifier ?? "en"
-        return content.string(key, locale: language) ?? (language == "en" ? nil : content.string(key, locale: "en"))
+        return content.string(key, locale: options.language())
     }
 
     /// Option colour, then the release theme, then the SDK default.
