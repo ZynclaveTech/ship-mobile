@@ -26,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -57,7 +59,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * app's own embedded ones, shown once as a modal over the app.
  *
  * When one may appear (all must hold):
- *  - not the first launch after install
+ *  - not the first launch after install (an app update is not a first launch)
  *  - not shown before on this device (once per popup id, ever)
  *  - at most one popup per app session
  *  - `options.popupGate()` allows it (the app says "no" during a call, a
@@ -68,7 +70,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [ShipPopupHost] over the app. The host also re-checks each time the app
  * comes to the foreground, so embedded popups show without any sync.
  */
-class ShipPopups internal constructor(
+public class ShipPopups internal constructor(
     context: Context,
     private val client: ShipClient,
     private val options: ShipUiOptions,
@@ -77,7 +79,7 @@ class ShipPopups internal constructor(
     private val armDelayMs: Long,
     private val installWasUpdated: (Context) -> Boolean,
 ) {
-    constructor(context: Context, client: ShipClient, options: ShipUiOptions) : this(
+    public constructor(context: Context, client: ShipClient, options: ShipUiOptions) : this(
         context, client, options,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
         io = Dispatchers.IO,
@@ -91,7 +93,7 @@ class ShipPopups internal constructor(
     private val gate = MutableStateFlow(options.popupGate())
 
     /** The popup waiting for a moment to be drawn; [ShipPopupHost] draws it while the gate is open. */
-    val current: StateFlow<Sdui.Popup?> = armed.asStateFlow()
+    public val current: StateFlow<Sdui.Popup?> = armed.asStateFlow()
 
     /** `options.popupGate()` as last read: on [gateChanged] and each time a popup is armed. */
     internal val gateOpen: StateFlow<Boolean> = gate.asStateFlow()
@@ -109,7 +111,7 @@ class ShipPopups internal constructor(
     internal val runtime get() = ShipRuntime(options, client.content)
 
     /** Re-evaluated shortly from now, so the first frames belong to the app. Call it after every Ship sync. */
-    fun armSoon() {
+    public fun armSoon() {
         scope.launch {
             delay(armDelayMs)
             arm(Instant.now())
@@ -118,12 +120,11 @@ class ShipPopups internal constructor(
 
     /**
      * Dismisses the armed popup (the host's own close, e.g. on sign-out) and
-     * reports it through `options.onPopupClosed`. Does nothing when no popup
-     * is showing.
+     * reports it through `options.onPopupClosed`, on the calling thread. Does
+     * nothing when no popup is showing. Safe from any thread.
      */
-    fun close() {
-        val popup = armed.value ?: return
-        armed.value = null
+    public fun close() {
+        val popup = armed.getAndUpdate { null } ?: return
         options.onPopupClosed(popup)
     }
 
@@ -132,7 +133,7 @@ class ShipPopups internal constructor(
      * shows an already armed popup, and also calls [armSoon], so a popup that
      * was held back while the gate was closed is armed now.
      */
-    fun gateChanged() {
+    public fun gateChanged() {
         gate.value = options.popupGate()
         armSoon()
     }
@@ -164,8 +165,12 @@ class ShipPopups internal constructor(
                     Log.i(LOG_TAG, "Popup ${candidate.id} held back: preflight failed")
                     continue
                 }
-                if (armed.value != null || Process.shownThisSession) return
-                armed.value = candidate
+                // Another arm, or a popup already shown this session, won while
+                // the preflight ran: this one is not shown, so whatever the
+                // preflight loaded for it is released now.
+                if (Process.shownThisSession || !armed.compareAndSet(null, candidate)) {
+                    options.onPopupClosed(candidate)
+                }
                 return
             }
         } finally {
@@ -258,7 +263,21 @@ class ShipPopups internal constructor(
         return out
     }
 
-    /** State that lives as long as the process, as the source's singleton did. */
+    /**
+     * DEBUG ONLY - never call it in a release build's normal flow. Forgets
+     * which popups this device has shown and how many launches it has
+     * counted, and lets this session show a popup again, so a tester can see
+     * a popup they already dismissed: call [armSoon] next. The next cold start
+     * counts as the first launch after install again (no popup on it).
+     */
+    public fun resetShownForDebug() {
+        synchronized(Process) {
+            prefs.edit().remove(SHOWN).remove(LAUNCHES).commit()
+            Process.shownThisSession = false
+        }
+    }
+
+    /** State that lives as long as the process: a new [ShipPopups] (an Activity restart) shares it. */
     internal object Process {
         @Volatile var shownThisSession = false
 
@@ -293,7 +312,7 @@ class ShipPopups internal constructor(
  * composition and each time the app comes to the foreground.
  */
 @Composable
-fun ShipPopupHost(popups: ShipPopups) {
+public fun ShipPopupHost(popups: ShipPopups) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(popups, lifecycle) {
         // Replays the current state on registration, so this also arms once at first composition.
@@ -310,7 +329,15 @@ fun ShipPopupHost(popups: ShipPopups) {
 /** The popup itself: a scrim (tap outside to close), a card holding the tree, and a close button. */
 @Composable
 internal fun ShipPopupView(popup: Sdui.Popup, popups: ShipPopups) {
-    val runtime = remember(popup.id, popups) { ShipRuntime(popups.runtime.options, popups.runtime.content, popups.files(popup)) }
+    // Which files the popup draws from reads the disk (an embedded popup's
+    // folder is unpacked on first use): worked out off the main thread, and
+    // nothing in the popup that needs a file draws until it is known.
+    val files by produceState<ReleaseFiles?>(null, popup.id, popups) {
+        value = withContext(Dispatchers.IO) { popups.files(popup) }
+    }
+    val runtime = remember(popup.id, popups, files) {
+        ShipRuntime(popups.runtime.options, popups.runtime.content, files ?: ReleaseFiles(null) { null })
+    }
     LaunchedEffect(popup.id) {
         withContext(Dispatchers.IO) { popups.markShown(popup) }
     }
@@ -347,7 +374,7 @@ internal fun ShipPopupView(popup: Sdui.Popup, popups: ShipPopups) {
                     .pointerInput(Unit) { detectTapGestures { } },
             ) {
                 // A button closes the popup first, so what it opens is not under it.
-                CompositionLocalProvider(LocalSduiActionWillRun provides componentTapped) {
+                CompositionLocalProvider(LocalShipComponentWillAct provides componentTapped) {
                     Box(Modifier.verticalScroll(rememberScrollState())) {
                         SduiNode(popup.body, onDismiss = popups::close)
                     }

@@ -33,6 +33,13 @@ android {
 
 }
 
+// The definitions corpus and signing vectors at the repo root, shared with the iOS tests.
+tasks.withType<Test>().configureEach {
+    val testdata = rootDir.parentFile.resolve("testdata")
+    inputs.dir(testdata).withPropertyName("testdata")
+    systemProperty("ship.testdata", testdata.absolutePath)
+}
+
 androidComponents {
     // The unit tests read fixture strings from src/debug/res, which only the
     // debug variant has; there is nothing for a release-variant test run to add.
@@ -40,6 +47,8 @@ androidComponents {
 }
 
 kotlin {
+    // Every public declaration says so: nothing becomes API by accident.
+    explicitApi()
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }

@@ -22,30 +22,30 @@ import java.time.format.DateTimeParseException
  * button, badge and spacer. Any other `type` is accepted only if the app
  * registered it in `customTypes`; the app then renders it from its raw fields.
  *
- * A definition `ship validate` passes must parse here too. Where the iOS
- * parser is looser than the validator (true read as 1, a 1 read as true),
- * this one follows the validator, so the difference only ever drops a
- * definition the publisher was already told was wrong.
+ * A definition `ship validate` passes must parse here too. iOS parses the
+ * same way: the shared corpus in the repo's `testdata/sdui` holds both to it.
  */
-object Sdui {
-    const val SCHEMA_VERSION = 1
-    const val RENDERER_VERSION = 1
-    const val MAX_NODES = 40
-    const val MAX_DEPTH = 6
-    const val MAX_TEXT_LENGTH = 500
+public object Sdui {
+    public const val SCHEMA_VERSION: Int = 1
+    public const val RENDERER_VERSION: Int = 1
+    public const val MAX_NODES: Int = 40
+    public const val MAX_DEPTH: Int = 6
+
+    /** In code points, as `ship validate` counts. */
+    public const val MAX_TEXT_LENGTH: Int = 500
 
     /** At most this many server cards per tab per feed. */
-    const val MAX_CARDS_PER_FEED = 2
+    public const val MAX_CARDS_PER_FEED: Int = 2
 
-    const val CARDS_DIR = "sdui/cards/"
-    const val POPUPS_DIR = "sdui/popups/"
+    internal const val CARDS_DIR = "sdui/cards/"
+    internal const val POPUPS_DIR = "sdui/popups/"
 
-    val textStyles = setOf("title", "headline", "body", "caption")
-    val buttonStyles = setOf("primary", "secondary", "text")
-    val colorTokens = setOf("primary", "accent", "surface", "surfaceVariant", "onSurface", "onSurfaceVariant", "onPrimary")
-    val tabs = setOf("discover", "following")
+    internal val textStyles = setOf("title", "headline", "body", "caption")
+    internal val buttonStyles = setOf("primary", "secondary", "text")
+    internal val colorTokens = setOf("primary", "accent", "surface", "surfaceVariant", "onSurface", "onSurfaceVariant", "onPrimary")
+    internal val tabs = setOf("discover", "following")
 
-    data class Card(
+    public data class Card(
         val id: String,
         /** Shown only to users the backend lists for this id. */
         val targeted: Boolean,
@@ -61,20 +61,21 @@ object Sdui {
     )
 
     /** A string-table key with fallback text; at least one is set. */
-    data class TextValue(val key: String?, val fallback: String?)
+    public data class TextValue(val key: String?, val fallback: String?)
 
-    sealed interface Action {
+    public sealed interface Action {
         /** `<scheme>://<route>`; opened through the app's own deep-link handling. */
-        data class Deeplink(val url: String) : Action
+        public data class Deeplink(val url: String) : Action
 
-        /** `https://<host>`; opened in the in-app browser. */
-        data class Web(val url: String) : Action
+        /** `https://<host>`; opened in the browser. */
+        public data class Web(val url: String) : Action
 
-        data object Dismiss : Action
+        /** Closes the popup, or dismisses the card. */
+        public data object Dismiss : Action
     }
 
-    sealed interface Node {
-        data class Stack(
+    public sealed interface Node {
+        public data class Stack(
             val axis: Axis,
             val spacing: Float,
             val padding: Float,
@@ -83,30 +84,31 @@ object Sdui {
             val children: List<Node>,
         ) : Node
 
-        data class Text(val value: TextValue, val style: String, val maxLines: Int?, val color: String?) : Node
+        public data class Text(val value: TextValue, val style: String, val maxLines: Int?, val color: String?) : Node
 
-        data class Image(val asset: String, val aspect: Float?, val cornerRadius: Float) : Node
+        public data class Image(val asset: String, val aspect: Float?, val cornerRadius: Float) : Node
 
         /** A Lottie animation from the same release (`lottie/<name>.json`). */
-        data class Lottie(val asset: String, val height: Float, val loop: Boolean) : Node
+        public data class Lottie(val asset: String, val height: Float, val loop: Boolean) : Node
 
-        data class Button(val label: TextValue, val style: String, val action: Action) : Node
+        public data class Button(val label: TextValue, val style: String, val action: Action) : Node
 
-        data class Badge(val text: TextValue, val color: String?) : Node
+        public data class Badge(val text: TextValue, val color: String?) : Node
 
-        data class Spacer(val height: Float) : Node
+        public data class Spacer(val height: Float) : Node
 
         /**
          * An app-registered component: its `type` was in `customTypes`. The app
          * renders it from [fields] (every key except `type`); the library never
          * interprets them.
          */
-        data class Custom(val type: String, val fields: JsonObject) : Node
+        public data class Custom(val type: String, val fields: JsonObject) : Node
 
-        enum class Axis { Vertical, Horizontal }
+        public enum class Axis { Vertical, Horizontal }
     }
 
-    class Invalid(val reason: String) : Exception(reason)
+    /** Why a definition was dropped. */
+    public class Invalid(public val reason: String) : Exception(reason)
 
     private val definitionId = Regex("^[a-z0-9-]{1,64}$")
 
@@ -123,7 +125,7 @@ object Sdui {
      * `lottie/...` path is in the same release; one that isn't makes the
      * card invalid.
      */
-    fun parseCard(data: String, scheme: String, customTypes: Set<String>, assetExists: (String) -> Boolean): Card {
+    public fun parseCard(data: String, scheme: String, customTypes: Set<String>, assetExists: (String) -> Boolean): Card {
         val (obj, id, targeted, start, end) = header(data)
         val placement = obj["placement"] as? JsonObject ?: throw Invalid("bad placement")
         val tabList = (placement["tabs"] as? JsonArray)?.map { string(it) }
@@ -173,7 +175,7 @@ object Sdui {
      * A popup (`sdui/popups/<id>.json`): the same strict component tree
      * as a card, shown once as a modal over the app.
      */
-    data class Popup(
+    public data class Popup(
         val id: String,
         /** Shown only to users the backend lists for this id. */
         val targeted: Boolean,
@@ -185,7 +187,7 @@ object Sdui {
     )
 
     /** Same strictness as [parseCard]: anything unknown or malformed drops the whole popup. */
-    fun parsePopup(data: String, scheme: String, customTypes: Set<String>, assetExists: (String) -> Boolean): Popup {
+    public fun parsePopup(data: String, scheme: String, customTypes: Set<String>, assetExists: (String) -> Boolean): Popup {
         val (obj, id, targeted, start, end) = header(data)
         val body = obj["body"] ?: throw Invalid("no body")
         return Popup(
@@ -203,7 +205,7 @@ object Sdui {
      * In schedule, never shown, targeted ones only if [eligible] names them,
      * best first (priority, then id, so every device picks the same one).
      */
-    fun eligiblePopups(all: List<Popup>, now: Instant, shown: Set<String>, eligible: Set<String>): List<Popup> =
+    public fun eligiblePopups(all: List<Popup>, now: Instant, shown: Set<String>, eligible: Set<String>): List<Popup> =
         all.filter { p ->
             p.id !in shown && (!p.targeted || p.id in eligible) &&
                 (p.start?.let { !now.isBefore(it) } ?: true) && (p.end?.let { !now.isAfter(it) } ?: true)
@@ -213,7 +215,7 @@ object Sdui {
      * "all" or "targeted"; anything else - a typo, a value from a newer spec -
      * drops the definition rather than guessing who should see it.
      */
-    fun audienceIsTargeted(value: JsonElement?): Boolean = when (string(value)) {
+    internal fun audienceIsTargeted(value: JsonElement?): Boolean = when (string(value)) {
         "all" -> false
         "targeted" -> true
         else -> throw Invalid("bad audience")
@@ -229,7 +231,7 @@ object Sdui {
         }
     }
 
-    fun action(value: JsonElement, scheme: String): Action {
+    internal fun action(value: JsonElement, scheme: String): Action {
         val obj = value as? JsonObject ?: throw Invalid("bad action")
         return when (string(obj["type"])) {
             "dismiss" -> Action.Dismiss
@@ -264,8 +266,7 @@ object Sdui {
         val key = string(obj["key"])
         val fallback = string(obj["fallback"])
         if (key == null && fallback == null) throw Invalid("text needs key or fallback")
-        // Code points, as `ship validate` counts (runes). iOS counts grapheme
-        // clusters, which is never more, so whatever passes validate passes here.
+        // Code points, as `ship validate` counts (runes), and as iOS counts.
         if (fallback != null && fallback.codePointCount(0, fallback.length) > MAX_TEXT_LENGTH) {
             throw Invalid("text too long")
         }
@@ -315,8 +316,7 @@ object Sdui {
                 )
             }
             "text" -> {
-                // A present but non-text style is refused, as `ship validate` refuses it (iOS
-                // would read it as the default; see the file comment).
+                // A present but non-text style is refused, as `ship validate` refuses it.
                 val style = if (obj.containsKey("style")) string(obj["style"]) else "body"
                 if (style == null || style !in textStyles) throw Invalid("bad text style")
                 val maxLines = integer(obj["maxLines"])
@@ -378,7 +378,7 @@ object Sdui {
      * dismissed, targeted ones only if [eligible] names them, highest priority
      * first (then id), at most [MAX_CARDS_PER_FEED].
      */
-    fun cards(all: List<Card>, tab: String, now: Instant, dismissed: Set<String>, eligible: Set<String>): List<Card> =
+    public fun cards(all: List<Card>, tab: String, now: Instant, dismissed: Set<String>, eligible: Set<String>): List<Card> =
         all.distinctBy { it.id }
             .filter { c ->
                 tab in c.tabs && c.id !in dismissed && (!c.targeted || c.id in eligible) &&
@@ -392,7 +392,7 @@ object Sdui {
      * soonest start still ahead, or just after the soonest end still ahead
      * (an end is inclusive). Null when no card on the tab starts or ends later.
      */
-    fun nextChange(all: List<Card>, tab: String, now: Instant): Instant? =
+    internal fun nextChange(all: List<Card>, tab: String, now: Instant): Instant? =
         all.asSequence()
             .filter { tab in it.tabs }
             .flatMap { sequenceOf(it.start, it.end?.plusMillis(1)) }
@@ -401,7 +401,7 @@ object Sdui {
             .minOrNull()
 
     /** Where a feed shows its cards: before the post at an index, or after the last post. */
-    data class Placement(val beforePost: Map<Int, List<Card>> = emptyMap(), val atEnd: List<Card> = emptyList())
+    public data class Placement(val beforePost: Map<Int, List<Card>> = emptyMap(), val atEnd: List<Card> = emptyList())
 
     /**
      * Places [cards] (in [cards] order) "after `position` posts", counted in
@@ -410,7 +410,7 @@ object Sdui {
      * it when the next page arrives would jump mid-scroll; only a feed with
      * nothing more to load shows it last. 
      */
-    fun placement(cards: List<Card>, postCount: Int, hasMore: Boolean): Placement {
+    public fun placement(cards: List<Card>, postCount: Int, hasMore: Boolean): Placement {
         val before = linkedMapOf<Int, MutableList<Card>>()
         val end = mutableListOf<Card>()
         for (card in cards) {
@@ -427,7 +427,7 @@ object Sdui {
      * there is none - "Happy Diwali, {first_name}!" -> "Happy Diwali!". Edits only around the placeholder, so the rest of
      * the text (a French space before "!") stays exactly as written.
      */
-    fun personalize(text: String, firstName: String?): String {
+    public fun personalize(text: String, firstName: String?): String {
         if (PLACEHOLDER !in text) return text
         val name = firstName?.trim(::isBlankChar)
         if (!name.isNullOrEmpty()) return text.replace(PLACEHOLDER, name)

@@ -28,13 +28,13 @@ import java.util.concurrent.ConcurrentHashMap
  *    silently drop its styling;
  *  - plurals and string arrays.
  */
-object ShipStrings {
+public object ShipStrings {
     /**
      * Wraps [context] so its resources read OTA strings first. [content]
      * is read on every lookup, so it may return null (Ship off, or no client
      * yet) and later start returning content.
      */
-    fun wrap(context: Context, content: () -> ShipContent?): Context = ShipContext(context, content)
+    public fun wrap(context: Context, content: () -> ShipContent?): Context = ShipContext(context, content)
 
     /**
      * The arguments a java.util.Formatter format reads: argument index ->
@@ -46,7 +46,7 @@ object ShipStrings {
      * Null if any `%` does not start a valid specifier: a stray `%` makes
      * String.format throw, so such a text must never be formatted.
      */
-    fun formatArgs(format: String): Map<Int, Set<String>>? {
+    internal fun formatArgs(format: String): Map<Int, Set<String>>? {
         val args = mutableMapOf<Int, MutableSet<String>>()
         var ordinary = 0
         var last = 0
@@ -112,7 +112,7 @@ object ShipStrings {
      * Android still reports the legacy ISO codes for Indonesian, Hebrew and
      * Yiddish; releases (like the app's own resources and iOS) use the current ones.
      */
-    fun releaseLanguage(language: String): String = when (language) {
+    public fun releaseLanguage(language: String): String = when (language) {
         "in" -> "id"
         "iw" -> "he"
         "ji" -> "yi"

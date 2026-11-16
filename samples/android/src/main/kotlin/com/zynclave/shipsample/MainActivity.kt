@@ -24,7 +24,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        intent.data?.let(SampleApp.ship::open)
+        // Only a fresh start: after a rotation or process restore the intent is
+        // the old one, already handled, and the screen state came back with it.
+        if (savedInstanceState == null) intent.data?.let(SampleApp.ship::open)
         setContent {
             MaterialTheme { SampleRoot(SampleApp.ship) }
         }

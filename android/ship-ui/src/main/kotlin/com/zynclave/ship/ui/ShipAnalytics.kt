@@ -104,7 +104,7 @@ internal fun visibleFraction(top: Float, bottom: Float, height: Float, viewport:
  * without a report (the feed waits for it and calls [tick]; see
  * [ShipImpressionsEffect]). Main thread.
  */
-class SduiImpressions internal constructor(
+public class SduiImpressions internal constructor(
     private val clock: () -> Long,
     private val onImpression: (String) -> Unit,
 ) {
@@ -115,14 +115,14 @@ class SduiImpressions internal constructor(
     private val nextCheck = MutableStateFlow<Long?>(null)
 
     /** The wall-clock time (ms) to call [tick] at, or null when nothing is pending. */
-    val deadline: StateFlow<Long?> = nextCheck.asStateFlow()
+    public val deadline: StateFlow<Long?> = nextCheck.asStateFlow()
 
     /**
      * The window range (top, bottom px) nothing covers. Set by the feed; a
      * change re-evaluates every card, since a card that sits still reports
      * nothing new.
      */
-    var viewport: Pair<Float, Float>? = null
+    internal var viewport: Pair<Float, Float>? = null
         set(value) {
             if (field == value) return
             field = value
@@ -141,7 +141,7 @@ class SduiImpressions internal constructor(
         tick()
     }
 
-    fun tick() {
+    internal fun tick() {
         val fractions = extents
             .mapValues { (_, e) -> visibleFraction(e.top, e.bottom, e.height, viewport) }
             .filterValues { it > 0f }

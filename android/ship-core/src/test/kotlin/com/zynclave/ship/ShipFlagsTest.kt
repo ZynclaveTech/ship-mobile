@@ -58,7 +58,7 @@ class ShipFlagsTest {
             """{"primary": "#GG0000", "primary200": "#FFF", "accent": {"light": "#102030"}, "background": "#000000"}""",
         )
         assertTrue(t.isEmpty())
-        for (bad in listOf("\"red\"", "\"#FF7A0\"", "\"#FF7A00FF\"", "16742912", "true", "null",
+        for (bad in listOf("\"red\"", "\"#FF7A0\"", "\"#+12345\"", "\"-12345\"", "\"#12 345\"", "\"#FF7A00FF\"", "16742912", "true", "null",
             """{"light": "#FF7A00", "dark": 5}""")) {
             assertTrue(bad, ShipTheme.parse("""{"primary": $bad}""").isEmpty())
         }

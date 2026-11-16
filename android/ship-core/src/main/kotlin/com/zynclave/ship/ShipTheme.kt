@@ -13,24 +13,24 @@ import kotlinx.serialization.json.contentOrNull
  * hex) means "no override", so a bad file can never make an app unreadable.
  * Colors are returned as ARGB longs (`0xFFRRGGBB`), independent of any UI toolkit.
  */
-object ShipTheme {
+public object ShipTheme {
     /**
      * The SDUI colour tokens a release may override by default, the ones the
      * Ship validator accepts. A host app with its own palette passes its own
      * names as `allowed` to the lookups.
      */
-    val DEFAULT_TOKENS: Set<String> = setOf(
+    public val DEFAULT_TOKENS: Set<String> = setOf(
         "primary", "accent", "surface", "surfaceVariant", "onSurface", "onSurfaceVariant", "onPrimary",
     )
 
-    data class ThemeColor(val light: Long, val dark: Long)
+    internal data class ThemeColor(val light: Long, val dark: Long)
 
     private class Cached(val content: ShipContent, val releaseId: String, val theme: Map<String, ThemeColor>)
 
     @Volatile private var cache: Cached? = null
 
     /** Parses [text], keeping only the tokens in [allowed]. */
-    fun parse(text: String, allowed: Set<String> = DEFAULT_TOKENS): Map<String, ThemeColor> =
+    internal fun parse(text: String, allowed: Set<String> = DEFAULT_TOKENS): Map<String, ThemeColor> =
         parseAll(text).filterKeys { it in allowed }
 
     /** Every token with a valid value, whatever its name. */
@@ -55,20 +55,20 @@ object ShipTheme {
     private fun hexColor(p: JsonPrimitive): Long? = if (p.isString) hexColor(p.contentOrNull ?: return null) else null
 
     /** Strict `#RRGGBB` (or `RRGGBB`) as opaque ARGB; anything else is rejected rather than guessed. */
-    fun hexColor(hex: String): Long? {
+    internal fun hexColor(hex: String): Long? {
         val h = hex.removePrefix("#")
         if (h.length != 6 || !h.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
         return 0xFF000000L or h.toLong(16)
     }
 
-    fun color(token: String, dark: Boolean, theme: Map<String, ThemeColor>): Long? =
+    internal fun color(token: String, dark: Boolean, theme: Map<String, ThemeColor>): Long? =
         theme[token]?.let { if (dark) it.dark else it.light }
 
     /**
      * The override for [token] in the applied release, or null. Only tokens in
      * [allowed] are honoured. [dark] is the host's current mode.
      */
-    fun color(token: String, dark: Boolean, content: ShipContent?, allowed: Set<String> = DEFAULT_TOKENS): Long? =
+    public fun color(token: String, dark: Boolean, content: ShipContent?, allowed: Set<String> = DEFAULT_TOKENS): Long? =
         if (token in allowed) color(token, dark, theme(content)) else null
 
     /**

@@ -12,13 +12,13 @@ import kotlinx.serialization.json.JsonPrimitive
  * revert), a missing or undecodable file, a missing key or a value of the
  * wrong JSON type. The caller then uses its built-in default.
  */
-object ShipFlags {
+public object ShipFlags {
     private class Cached(val content: ShipContent, val releaseId: String, val flags: Map<String, JsonElement>)
 
     @Volatile private var cache: Cached? = null
 
     /** A top-level JSON object, or nothing. Values stay as decoded and are type-checked on read. */
-    fun parse(text: String): Map<String, JsonElement> =
+    internal fun parse(text: String): Map<String, JsonElement> =
         runCatching { ManifestVerifier.json.parseToJsonElement(text) as? JsonObject }.getOrNull().orEmpty()
 
     /** Parsed once per release, so repeated reads cost a field read and a map lookup. */
@@ -33,7 +33,7 @@ object ShipFlags {
 
     // Typed reads on parsed flags.
 
-    fun boolean(key: String, flags: Map<String, JsonElement>): Boolean? {
+    internal fun boolean(key: String, flags: Map<String, JsonElement>): Boolean? {
         val p = flags[key] as? JsonPrimitive ?: return null
         return if (p.isString) null else when (p.content) {
             "true" -> true
@@ -42,14 +42,14 @@ object ShipFlags {
         }
     }
 
-    fun int(key: String, flags: Map<String, JsonElement>): Int? {
+    internal fun int(key: String, flags: Map<String, JsonElement>): Int? {
         val d = number(flags[key]) ?: return null
         return if (d == Math.rint(d) && Math.abs(d) < Int.MAX_VALUE.toDouble()) d.toInt() else null
     }
 
-    fun double(key: String, flags: Map<String, JsonElement>): Double? = number(flags[key])
+    internal fun double(key: String, flags: Map<String, JsonElement>): Double? = number(flags[key])
 
-    fun string(key: String, flags: Map<String, JsonElement>): String? {
+    internal fun string(key: String, flags: Map<String, JsonElement>): String? {
         val p = flags[key] as? JsonPrimitive ?: return null
         return if (p.isString) p.content else null
     }
@@ -62,8 +62,15 @@ object ShipFlags {
 
     // Reads on applied content.
 
-    fun boolean(key: String, content: ShipContent?): Boolean? = boolean(key, flags(content))
-    fun int(key: String, content: ShipContent?): Int? = int(key, flags(content))
-    fun double(key: String, content: ShipContent?): Double? = double(key, flags(content))
-    fun string(key: String, content: ShipContent?): String? = string(key, flags(content))
+    /** A JSON `true`/`false`; not `1`, not `"true"`. */
+    public fun boolean(key: String, content: ShipContent?): Boolean? = boolean(key, flags(content))
+
+    /** A whole JSON number that fits in 32 bits (`5`, `5.0`). iOS reads 64-bit integers. */
+    public fun int(key: String, content: ShipContent?): Int? = int(key, flags(content))
+
+    /** Any JSON number. */
+    public fun double(key: String, content: ShipContent?): Double? = double(key, flags(content))
+
+    /** A JSON string. */
+    public fun string(key: String, content: ShipContent?): String? = string(key, flags(content))
 }

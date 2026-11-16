@@ -100,7 +100,7 @@ internal val Sdui.Node.rowFlex: RowFlex
 internal fun SduiNode(node: Sdui.Node, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val runtime = LocalShipRuntime.current
-    val actionWillRun = LocalSduiActionWillRun.current
+    val actionWillRun = LocalShipComponentWillAct.current
     when (node) {
         is Sdui.Node.Stack -> {
             val background = node.background?.let { tokenColor(it) }

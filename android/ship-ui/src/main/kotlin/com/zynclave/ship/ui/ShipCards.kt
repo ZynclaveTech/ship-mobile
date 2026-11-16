@@ -48,13 +48,13 @@ internal const val LOG_TAG = "com.zynclave.ship"
  * Create it once per launch. Reading cards touches the disk: call [cards]
  * off the main thread, or use [rememberShipCards], which does.
  */
-class ShipCards internal constructor(
+public class ShipCards internal constructor(
     context: Context,
     private val client: ShipClient,
     private val options: ShipUiOptions,
     clock: () -> Long,
 ) {
-    constructor(context: Context, client: ShipClient, options: ShipUiOptions) :
+    public constructor(context: Context, client: ShipClient, options: ShipUiOptions) :
         this(context, client, options, System::currentTimeMillis)
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -62,13 +62,13 @@ class ShipCards internal constructor(
     private var parsed: Pair<String, List<Sdui.Card>>? = null
 
     /** Moves each time what [cards] returns may have changed: a card dismissed, or [refresh] called. */
-    val changes: StateFlow<Int> = changed.asStateFlow()
+    public val changes: StateFlow<Int> = changed.asStateFlow()
 
     internal val analytics get() = ShipAnalytics(options.analytics) { client.content.state?.releaseId }
     internal val runtime get() = ShipRuntime(options, client.content)
 
     /** Impression tracking for the cards on screen; see [ShipImpressionsEffect]. */
-    val impressions = SduiImpressions(clock) { analytics.impression(it) }
+    public val impressions: SduiImpressions = SduiImpressions(clock) { analytics.impression(it) }
 
     private val feedLoads = SduiFeedLoads()
 
@@ -78,17 +78,17 @@ class ShipCards internal constructor(
      * names them, best first, at most [Sdui.MAX_CARDS_PER_FEED]. Empty after a
      * revert to the embedded content.
      */
-    fun cards(tab: String, now: Instant = Instant.now()): List<Sdui.Card> =
+    public fun cards(tab: String, now: Instant = Instant.now()): List<Sdui.Card> =
         Sdui.cards(all(), tab, now, dismissed(), eligible = options.eligibility().cards)
 
     /** When [cards] for [tab] changes on the clock alone (a card starts or ends), or null. */
-    fun nextChange(tab: String, now: Instant = Instant.now()): Instant? = Sdui.nextChange(all(), tab, now)
+    internal fun nextChange(tab: String, now: Instant = Instant.now()): Instant? = Sdui.nextChange(all(), tab, now)
 
     /**
      * Dismisses a card for good, and reports it to analytics once however
      * many times it is tapped.
      */
-    fun dismiss(id: String) {
+    public fun dismiss(id: String) {
         synchronized(this) {
             val current = dismissed()
             if (id in current) return
@@ -99,7 +99,7 @@ class ShipCards internal constructor(
     }
 
     /** Call after a Ship sync applied a release, or when `options.eligibility` changed: [changes] moves, so a feed recomputes. */
-    fun refresh() {
+    public fun refresh() {
         changed.value++
     }
 
@@ -108,7 +108,7 @@ class ShipCards internal constructor(
      * time a refresh finishes is a new feed load, and every card may be
      * counted as seen again; a post removed in place is not one.
      */
-    fun observeRefresh(isRefreshing: Boolean) {
+    public fun observeRefresh(isRefreshing: Boolean) {
         val generation = feedLoads.observe(isRefreshing)
         if (generation != lastGeneration) {
             lastGeneration = generation
@@ -168,7 +168,7 @@ class ShipCards internal constructor(
  * are read off the main thread; until they are known, no cards.
  */
 @Composable
-fun rememberShipCards(cards: ShipCards, tab: String?): List<Sdui.Card> {
+public fun rememberShipCards(cards: ShipCards, tab: String?): List<Sdui.Card> {
     if (tab == null) return emptyList()
     val changes by cards.changes.collectAsState()
     var clock by remember { mutableIntStateOf(0) }
@@ -202,7 +202,7 @@ internal suspend fun waitUntil(instant: Instant, clock: () -> Instant = Instant:
 
 /** Counts the cards in the feed as seen once each has been half on screen for a second. Place it beside the feed. */
 @Composable
-fun ShipImpressionsEffect(cards: ShipCards) {
+public fun ShipImpressionsEffect(cards: ShipCards) {
     val deadline by cards.impressions.deadline.collectAsState()
     LaunchedEffect(deadline) {
         val at = deadline ?: return@LaunchedEffect
@@ -213,7 +213,7 @@ fun ShipImpressionsEffect(cards: ShipCards) {
 
 /** A server-driven card: its body, a tap action and a close button. */
 @Composable
-fun ShipCard(card: Sdui.Card, cards: ShipCards, modifier: Modifier = Modifier) {
+public fun ShipCard(card: Sdui.Card, cards: ShipCards, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val runtime = remember(cards) { cards.runtime }
     val dismiss = remember(card.id, cards) { { cards.dismiss(card.id) } }
@@ -245,7 +245,7 @@ fun ShipCard(card: Sdui.Card, cards: ShipCards, modifier: Modifier = Modifier) {
             ) {
                 // A button or app tile inside the card counts as a component tap first.
                 CompositionLocalProvider(
-                    LocalSduiActionWillRun provides { cards.analytics.tap(card.id, ShipAnalytics.TapTarget.Component) },
+                    LocalShipComponentWillAct provides { cards.analytics.tap(card.id, ShipAnalytics.TapTarget.Component) },
                 ) {
                     SduiNode(card.body, dismiss)
                 }

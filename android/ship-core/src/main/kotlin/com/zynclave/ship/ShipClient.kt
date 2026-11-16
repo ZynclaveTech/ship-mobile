@@ -11,6 +11,8 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.Buffer
+import android.content.Context
+import kotlin.random.Random
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -24,15 +26,20 @@ import java.util.concurrent.ConcurrentHashMap
  * difference in how a release is applied (see ShipClient).
  */
 
-class ShipResponse(val body: ByteArray, val status: Int)
+/**
+ * What a [ShipTransport] returns: the response [body] and its HTTP [status].
+ * Public because a custom [ShipTransport] builds it; a failure status needs no body.
+ */
+public class ShipResponse(public val body: ByteArray, public val status: Int)
 
 /** Fetches bytes over HTTP. Injected so tests run without the real CDN. */
-fun interface ShipTransport {
+public fun interface ShipTransport {
     /** Must throw [ShipException.TooLarge] instead of buffering more than [limit] bytes. */
-    suspend fun get(url: HttpUrl, limit: Long): ShipResponse
+    public suspend fun get(url: HttpUrl, limit: Long): ShipResponse
 }
 
-class OkHttpShipTransport(private val client: OkHttpClient) : ShipTransport {
+/** The default [ShipTransport]. Give it its own [OkHttpClient], never one that adds the app's auth headers. */
+public class OkHttpShipTransport(private val client: OkHttpClient) : ShipTransport {
     override suspend fun get(url: HttpUrl, limit: Long): ShipResponse = runInterruptible(Dispatchers.IO) {
         client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
             // Callers only need the status of a failure; an error page larger
@@ -50,7 +57,7 @@ class OkHttpShipTransport(private val client: OkHttpClient) : ShipTransport {
     }
 }
 
-data class ShipConfig(
+public data class ShipConfig(
     val cdn: HttpUrl,
     val app: String,
     val channel: String,
@@ -61,11 +68,30 @@ data class ShipConfig(
     val bucket: Int,
     /** Refuse releases whose assets add up to more than this. */
     val maxReleaseBytes: Long = 50L shl 20,
-)
+) {
+    public companion object {
+        private const val PREFS = "zynclave_ship"
+        private const val BUCKET_KEY = "bucket"
+
+        /**
+         * A random bucket in 0..99, chosen once per install and kept in the
+         * app's SharedPreferences (`zynclave_ship`, key `bucket`). Pass it as
+         * [bucket]: it decides which devices a partial rollout reaches.
+         */
+        public fun stableBucket(context: Context): Int {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val stored = prefs.getInt(BUCKET_KEY, -1)
+            if (stored in 0..99) return stored
+            val bucket = Random.nextInt(100)
+            prefs.edit().putInt(BUCKET_KEY, bucket).apply()
+            return bucket
+        }
+    }
+}
 
 /** What is applied on this device. Stored inside the release directory it describes. */
 @Serializable
-data class AppliedState(
+public data class AppliedState(
     /** What this content was applied for. A different app, channel or runtime (an app update) means it no longer applies. */
     val app: String,
     val channel: String,
@@ -76,15 +102,20 @@ data class AppliedState(
     val assets: List<String>,
 )
 
-sealed interface SyncResult {
+/** What [ShipClient.sync] did. */
+public sealed interface SyncResult {
     /** The channel has nothing for this device; whatever is applied stays. */
-    data object NoUpdate : SyncResult
-    data class UpToDate(val seq: Long) : SyncResult
-    data class Applied(val state: AppliedState) : SyncResult
+    public data object NoUpdate : SyncResult
+
+    /** The release this device already has. */
+    public data class UpToDate(val seq: Long) : SyncResult
+
+    /** A new release was verified, downloaded and applied. */
+    public data class Applied(val state: AppliedState) : SyncResult
 }
 
 /** Read-only view of applied content, safe from any thread (string lookups run on the main thread). */
-class ShipContent internal constructor() {
+public class ShipContent internal constructor() {
     private class Snapshot(val state: AppliedState?, val dir: File?) {
         val assets: Set<String> = state?.assets?.toSet().orEmpty()
         val strings = ConcurrentHashMap<String, Map<String, String>>()
@@ -92,17 +123,18 @@ class ShipContent internal constructor() {
 
     @Volatile private var snapshot = Snapshot(null, null)
 
-    val state: AppliedState? get() = snapshot.state
+    /** What is applied, or null when nothing is. */
+    public val state: AppliedState? get() = snapshot.state
 
     /** The file of an applied asset, or null when no release (or a revert) is applied. */
-    fun file(asset: String): File? {
+    public fun file(asset: String): File? {
         val s = snapshot
         val dir = s.dir ?: return null
         return if (asset in s.assets) File(dir, asset) else null
     }
 
     /** The OTA value for [key] in `strings/<locale>.json` (a flat JSON object of strings), if any. */
-    fun string(key: String, locale: String): String? {
+    public fun string(key: String, locale: String): String? {
         val s = snapshot
         val table = s.strings.getOrPut(locale) {
             val file = if ("strings/$locale.json" in s.assets) s.dir?.let { File(it, "strings/$locale.json") } else null
@@ -130,13 +162,14 @@ class ShipContent internal constructor() {
  *
  * @param root directory owned by this client (created if missing).
  */
-class ShipClient(
+public class ShipClient(
     private val config: ShipConfig,
     private val root: File,
     private val transport: ShipTransport = OkHttpShipTransport(OkHttpClient()),
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    val content = ShipContent()
+    /** The applied content. The same object for the client's lifetime; what it holds moves on with each sync. */
+    public val content: ShipContent = ShipContent()
     private val mutex = Mutex()
     private val releases = File(root, "releases")
     private val pointer = File(root, "current")
@@ -152,14 +185,15 @@ class ShipClient(
         deleteReleasesExcept(setOfNotNull(dir?.name))
     }
 
-    val applied: AppliedState? get() = content.state
+    /** What is applied, or null when nothing is. */
+    public val applied: AppliedState? get() = content.state
 
     /**
      * Fetches the manifest for this device and applies it if it is new. On
      * any error the applied content is left exactly as it was. Calls run one
      * at a time.
      */
-    suspend fun sync(): SyncResult = mutex.withLock {
+    public suspend fun sync(): SyncResult = mutex.withLock {
         withContext(io) { syncLocked() }
     }
 
@@ -245,8 +279,9 @@ class ShipClient(
         }
     }
 
-    companion object {
-        const val PLATFORM = "android"
+    public companion object {
+        /** The `platform` every manifest for this SDK must name. */
+        public const val PLATFORM: String = "android"
         internal const val STATE_FILE = ".ship-state.json"
         internal const val MANIFEST_LIMIT = 1L shl 20
         private val DIR_NAME = Regex("^[0-9a-f-]{36}$")

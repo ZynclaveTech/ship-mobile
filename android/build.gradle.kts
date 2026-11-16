@@ -8,8 +8,9 @@ plugins {
 
 val shipVersion = "0.1.0"
 
+// A property set to an empty or blank value (an unset CI secret, say) is not a key.
 val signingConfigured = listOf("signingInMemoryKey", "signing.keyId", "signing.gnupg.keyName")
-    .any { providers.gradleProperty(it).isPresent }
+    .any { !providers.gradleProperty(it).orNull.isNullOrBlank() }
 
 // Maven Central uploads must be signed: fail before anything runs, not after a rejected upload.
 // publishToMavenLocal is unaffected.

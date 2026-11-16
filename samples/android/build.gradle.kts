@@ -39,7 +39,6 @@ kotlin {
 dependencies {
     implementation(project(":ship-core"))
     implementation(project(":ship-ui"))
-    implementation(libs.okhttp)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

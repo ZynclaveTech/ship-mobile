@@ -18,7 +18,6 @@ import com.zynclave.ship.ui.ShipUiOptions
 import kotlinx.coroutines.CancellationException
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.io.File
-import kotlin.random.Random
 
 /** The release's public key. Replace it with the key your Ship app gives you. */
 const val SAMPLE_PUBLIC_KEY = "REPLACE_WITH_SHIP_SAMPLE_PUBLIC_KEY"
@@ -89,7 +88,7 @@ class Ship(context: Context) {
                 channel = channel,
                 runtime = runtime,
                 pinned = listOf(key),
-                bucket = stableBucket(context),
+                bucket = ShipConfig.stableBucket(context),
             )
             val client = ShipClient(config, File(context.filesDir, "ship"))
             val options = ShipUiOptions(
@@ -138,10 +137,11 @@ class Ship(context: Context) {
         popups?.armSoon()
     }
 
-    /** A random 0..99 chosen once per install; it decides partial rollouts. */
-    private fun stableBucket(context: Context): Int {
-        val prefs = context.getSharedPreferences("ship-sample", Context.MODE_PRIVATE)
-        prefs.getInt("bucket", -1).takeIf { it in 0..99 }?.let { return it }
-        return Random.nextInt(100).also { prefs.edit().putInt("bucket", it).apply() }
+    /** Debug screen only: forget which popups were shown, then look again. */
+    fun resetPopups() {
+        val popups = popups ?: return
+        popups.resetShownForDebug()
+        popups.armSoon()
+        status = "Popup memory reset"
     }
 }

@@ -45,13 +45,13 @@ internal fun ShipContent.files() = ReleaseFiles(state?.releaseId) { file(it) }
 
 /** Drop-in for `painterResource(id)`: the release's `images/<name of id>.png|.jpg` if it has one. */
 @Composable
-fun otaPainterResource(@DrawableRes id: Int, content: ShipContent?): Painter {
+internal fun otaPainterResource(@DrawableRes id: Int, content: ShipContent?): Painter {
     val name = LocalResources.current.getResourceEntryName(id)
     val ota = OtaImage.bitmap(name, content)
     return if (ota != null) remember(ota) { BitmapPainter(ota) } else painterResource(id)
 }
 
-object OtaImage {
+internal object OtaImage {
     /** Larger than this on either side is refused: a release must not be able to exhaust memory. */
     internal const val MAX_SIDE = 4096
 
@@ -60,7 +60,7 @@ object OtaImage {
     private val cache = ConcurrentHashMap<String, Box>()
 
     /** Decoded once per release + name; a file that fails to decode, or is too large, is a miss. */
-    fun bitmap(name: String, content: ShipContent?): ImageBitmap? {
+    internal fun bitmap(name: String, content: ShipContent?): ImageBitmap? {
         val c = content ?: return null
         val release = c.state?.releaseId ?: return null
         val key = "$release|$name"
@@ -130,9 +130,9 @@ object OtaImage {
     }
 }
 
-object OtaLottie {
+internal object OtaLottie {
     /** The release's `lottie/<name>.json`, if it has one. */
-    fun file(name: String, content: ShipContent?): File? = content?.file("lottie/$name.json")
+    internal fun file(name: String, content: ShipContent?): File? = content?.file("lottie/$name.json")
 }
 
 /**
@@ -142,7 +142,7 @@ object OtaLottie {
  * path-keyed cache never serves one release's animation for another.
  */
 @Composable
-fun rememberOtaLottieComposition(name: String, @RawRes fallback: Int, content: ShipContent?): LottieCompositionResult {
+internal fun rememberOtaLottieComposition(name: String, @RawRes fallback: Int, content: ShipContent?): LottieCompositionResult {
     val file = OtaLottie.file(name, content)
     if (file != null) {
         val ota = rememberLottieComposition(LottieCompositionSpec.File(file.path))

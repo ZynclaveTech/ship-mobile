@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +42,7 @@ fun DebugScreen(ship: Ship, onBack: () -> Unit) {
                 onClick = { scope.launch { ship.sync() } },
                 enabled = ship.isConfigured && !ship.syncing,
             ) { Text("Check now") }
+            OutlinedButton(onClick = ship::resetPopups, enabled = ship.isConfigured) { Text("Reset popup memory") }
         }
     }
 }

@@ -2,6 +2,7 @@ package com.zynclave.ship.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.zynclave.ship.ShipContent
@@ -14,17 +15,18 @@ import java.util.Locale
  * `sdui_tap`, `sdui_dismiss`, `popup_shown` and `popup_action`. Forward them
  * to whatever the app uses, behind its own consent gate.
  */
-fun interface ShipAnalyticsSink {
-    fun log(name: String, params: Map<String, String>)
+public fun interface ShipAnalyticsSink {
+    public fun log(name: String, params: Map<String, String>)
 }
 
 /**
  * The ids the backend listed for the signed-in user. Targeted cards and
  * popups show only when named here.
  */
-data class ShipEligible(val cards: Set<String>, val popups: Set<String>) {
-    companion object {
-        val None = ShipEligible(emptySet(), emptySet())
+public data class ShipEligible(val cards: Set<String>, val popups: Set<String>) {
+    public companion object {
+        /** Nothing targeted is shown. */
+        public val None: ShipEligible = ShipEligible(emptySet(), emptySet())
     }
 }
 
@@ -35,9 +37,13 @@ data class ShipEligible(val cards: Set<String>, val popups: Set<String>) {
  * The functions are called on the main thread, except [eligibility] and
  * [popupGate], which may also be read from a background thread.
  */
-data class ShipUiOptions(
-    /** The URL scheme a `deeplink` action must use, e.g. `myapp`. */
-    val deeplinkScheme: String,
+public class ShipUiOptions(
+    /**
+     * The URL scheme a `deeplink` action must use, e.g. `myapp`: RFC 3986
+     * scheme syntax, and not `http` or `https` (web links are `web` actions).
+     * Anything else is a programming error and throws IllegalArgumentException.
+     */
+    public val deeplinkScheme: String,
     /**
      * A theme token (`primary`, `accent`, `surface`, `surfaceVariant`,
      * `onSurface`, `onSurfaceVariant`, `onPrimary`) to the app's colour.
@@ -45,63 +51,99 @@ data class ShipUiOptions(
      * it is in [themeTokens]), then this, then a default (Material theme
      * colours for the surface and text tokens). Return null to decline.
      */
-    val color: (token: String, dark: Boolean) -> Color? = { _, _ -> null },
+    public val color: (token: String, dark: Boolean) -> Color? = { _, _ -> null },
     /** Opens a `deeplink` action through the app's own routing. */
-    val openDeeplink: (Uri) -> Unit,
+    public val openDeeplink: (Uri) -> Unit,
     /**
      * The language code used to look up a release's OTA strings
      * (`strings/<code>.json`): the app's chosen language. Default: the
      * device's primary language code.
      */
-    val language: () -> String = ::deviceLanguage,
+    public val language: () -> String = ::deviceLanguage,
     /**
      * A text `key` to the app's own (localised) string, or null to use the
      * definition's `fallback`. Text resolves as: the release's OTA string for
      * [language], then this, then the literal fallback.
+     *
+     * The SDK also asks it for one reserved key of its own, `common_close`:
+     * the accessibility label of the close button on popups and cards
+     * (default "Close").
      */
-    val appString: (key: String) -> String? = { null },
+    public val appString: (key: String) -> String? = { null },
     /** Last step over every text, e.g. to replace `{first_name}`. Default: drops the placeholder, as for a user with no name. */
-    val personalize: (String) -> String = { Sdui.personalize(it, firstName = null) },
+    public val personalize: (String) -> String = { Sdui.personalize(it, firstName = null) },
     /** Targeted cards and popups show only when named here, so the default shows none of them. */
-    val eligibility: () -> ShipEligible = { ShipEligible.None },
+    public val eligibility: () -> ShipEligible = { ShipEligible.None },
     /**
      * Whether a popup may be on screen right now. Return false during a call,
      * a live room, a lock screen, or while signed out. Call
      * [ShipPopups.gateChanged] when the answer changes. Default: always.
      */
-    val popupGate: () -> Boolean = { true },
+    public val popupGate: () -> Boolean = { true },
     /**
      * Asked before a selected popup is presented, e.g. to load the live room
      * or community it shows. Return false to skip it this time: it is not
      * marked shown, the next best candidate is tried, and it is considered
      * again at the next [ShipPopups.armSoon]. Default: always true.
      */
-    val popupPreflight: suspend (Sdui.Popup) -> Boolean = { true },
+    public val popupPreflight: suspend (Sdui.Popup) -> Boolean = { true },
     /**
      * Called when a popup that was showing closes (the person closed it, a
-     * button closed it, or [ShipPopups.close]). Release whatever
+     * button closed it, or [ShipPopups.close]), and for a popup [popupPreflight]
+     * accepted that was then not shown after all. Release whatever
      * [popupPreflight] loaded for it. Default: nothing.
+     *
+     * Runs on the thread that closed it: the main thread for the person's taps,
+     * the caller's thread for [ShipPopups.close].
      */
-    val onPopupClosed: (Sdui.Popup) -> Unit = {},
-    val analytics: ShipAnalyticsSink? = null,
+    public val onPopupClosed: (Sdui.Popup) -> Unit = {},
+    public val analytics: ShipAnalyticsSink? = null,
     /**
      * App-registered component types, drawn from their `fields`. The keys are
-     * the only extra `type`s the parser accepts.
+     * the only extra `type`s the parser accepts; a built-in type name can never
+     * be replaced.
+     *
+     * A component that acts on a tap (navigates, opens something) should first
+     * call [LocalShipComponentWillAct], when it is not null: inside a popup that
+     * closes the popup and logs `popup_action` with `component`, inside a card
+     * it logs `sdui_tap` with `component`, exactly as a built-in button does.
+     *
+     * ```
+     * val willAct = LocalShipComponentWillAct.current
+     * Button(onClick = { willAct?.invoke(); openRoom(id) }) { ... }
+     * ```
      */
-    val components: Map<String, @Composable (Sdui.Node.Custom) -> Unit> = emptyMap(),
+    public val components: Map<String, @Composable (Sdui.Node.Custom) -> Unit> = emptyMap(),
     /**
      * A folder in the app's assets holding `sdui/popups/<id>.json` and the files
      * they name (`lottie/...`, `images/...`) at their release paths, e.g.
      * `ship-embedded`. They show without any Ship release.
      */
-    val embeddedPopupsAssetDir: String? = null,
+    public val embeddedPopupsAssetDir: String? = null,
     /**
      * The tokens a release's `config/theme.json` may override. Default:
      * [ShipTheme.DEFAULT_TOKENS], the SDUI colour tokens. A host app with its
      * own palette lists its own names here.
      */
-    val themeTokens: Set<String> = ShipTheme.DEFAULT_TOKENS,
-)
+    public val themeTokens: Set<String> = ShipTheme.DEFAULT_TOKENS,
+) {
+    init {
+        require(isValidDeeplinkScheme(deeplinkScheme)) {
+            "deeplinkScheme \"$deeplinkScheme\" must be an RFC 3986 scheme (a letter, then letters, digits, +, - or .), and not http or https"
+        }
+    }
+}
+
+/**
+ * RFC 3986 `scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`, and not a web
+ * scheme: `web` actions carry those.
+ */
+internal fun isValidDeeplinkScheme(scheme: String): Boolean {
+    if (scheme.isEmpty() || scheme.first() !in 'a'..'z' && scheme.first() !in 'A'..'Z') return false
+    if (!scheme.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '+' || it == '-' || it == '.' }) return false
+    return !scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)
+}
+
 
 /** The device's primary language code, e.g. `hi`. */
 internal fun deviceLanguage(): String = ShipStrings.releaseLanguage(Locale.getDefault().language.ifEmpty { "en" })
@@ -141,8 +183,16 @@ internal class ShipRuntime(
 }
 
 internal val LocalShipRuntime = staticCompositionLocalOf {
-    ShipRuntime(ShipUiOptions(deeplinkScheme = "", openDeeplink = {}), content = null)
+    ShipRuntime(ShipUiOptions(deeplinkScheme = "none", openDeeplink = {}), content = null)
 }
 
-/** Run before an SDUI button's action: a popup closes itself first, so a deep link or web page opens over the app rather than under the popup. */
-internal val LocalSduiActionWillRun = staticCompositionLocalOf<(() -> Unit)?> { null }
+/**
+ * What a component must call just before it acts on a tap, or null outside a
+ * popup or card. Built-in buttons call it; an app-registered component (see
+ * [ShipUiOptions.components]) that navigates or opens something must call it
+ * too. Inside a popup it closes the popup first, so what the tap opens is not
+ * under it, and logs `popup_action` with `component`; inside a card it logs
+ * `sdui_tap` with `component`. Main thread.
+ */
+public val LocalShipComponentWillAct: ProvidableCompositionLocal<(() -> Unit)?> =
+    staticCompositionLocalOf { null }

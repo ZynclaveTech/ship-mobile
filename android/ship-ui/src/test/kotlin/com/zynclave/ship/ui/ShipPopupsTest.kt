@@ -2,6 +2,7 @@ package com.zynclave.ship.ui
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -68,9 +69,10 @@ class ShipPopupsTest {
         closed: (Sdui.Popup) -> Unit = {},
         eligible: Set<String> = emptySet(),
         components: Map<String, @androidx.compose.runtime.Composable (Sdui.Node.Custom) -> Unit> = emptyMap(),
+        open: (android.net.Uri) -> Unit = {},
     ) = ShipUiOptions(
         deeplinkScheme = TEST_SCHEME,
-        openDeeplink = {},
+        openDeeplink = open,
         popupGate = gate,
         popupPreflight = preflight,
         onPopupClosed = closed,
@@ -356,7 +358,7 @@ class ShipPopupsTest {
         val closed = mutableListOf<String>()
         val p = popups(
             testClient(temp.newFolder(), "r1", mapOf(popup("hi", body = body))),
-            options(closed = { closed += it.id }).copy(openDeeplink = { opened += it }),
+            options(closed = { closed += it.id }, open = { opened += it }),
         )
         compose.setContent { MaterialTheme { ShipPopupHost(p) } }
         fun arm() { arm(p); compose.waitForIdle() }
@@ -402,6 +404,73 @@ class ShipPopupsTest {
         assertNull(p.current.value)
         assertEquals(listOf("popup_shown", "popup_action"), sink.names)
         assertEquals("close", sink.events.last().second["action"])
+    }
+
+    @Test
+    fun `a custom component that calls the hook closes the popup and logs a component action`() {
+        secondLaunch()
+        val opened = mutableListOf<String>()
+        val tile: @androidx.compose.runtime.Composable (Sdui.Node.Custom) -> Unit = { node ->
+            val willAct = LocalShipComponentWillAct.current
+            androidx.compose.material3.Text(
+                "Open room",
+                androidx.compose.ui.Modifier.clickable {
+                    willAct?.invoke()
+                    opened += node.fields.getValue("room").toString()
+                },
+            )
+        }
+        val closed = mutableListOf<String>()
+        val p = popups(
+            testClient(temp.newFolder(), "r1", mapOf(popup("hi", body = """{"type": "tile", "room": "r1"}"""))),
+            options(components = mapOf("tile" to tile), closed = { closed += it.id }),
+        )
+        compose.setContent { MaterialTheme { ShipPopupHost(p) } }
+        arm(p)
+        compose.waitForIdle()
+        compose.onNodeWithText("Open room").performClick()
+        assertNull("the hook closed the popup", p.current.value)
+        assertEquals(listOf("hi"), closed)
+        assertEquals(listOf("\"r1\""), opened)
+        val actions = sink.events.filter { it.first == "popup_action" }
+        assertEquals(1, actions.size)
+        assertEquals("component", actions.single().second["action"])
+        assertEquals("hi", actions.single().second["definition_id"])
+    }
+
+    @Test
+    fun `a popup that passes preflight but loses the race is released through onPopupClosed`() {
+        secondLaunch()
+        val closed = mutableListOf<String>()
+        val p = popups(
+            testClient(temp.newFolder(), "r1", mapOf(popup("a"))),
+            options(
+                // Another popup was shown this session while the preflight ran.
+                preflight = { ShipPopups.Process.shownThisSession = true; true },
+                closed = { closed += it.id },
+            ),
+        )
+        arm(p)
+        assertNull("not armed", p.current.value)
+        assertEquals("what the preflight loaded is released", listOf("a"), closed)
+    }
+
+    @Test
+    fun `resetShownForDebug forgets the shown popups and the launch count`() {
+        secondLaunch()
+        val prefs = app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE)
+        val p = popups(testClient(temp.newFolder(), "r1", mapOf(popup("a"))))
+        arm(p)
+        p.markShown(p.current.value!!)
+        p.close()
+        arm(p)
+        assertNull("spent, and one per session", p.current.value)
+
+        p.resetShownForDebug()
+        assertNull(prefs.getStringSet("popups_shown", null))
+        assertEquals("the next cold start is a first launch again", 0, prefs.getInt("popups_launches", 0))
+        arm(p)
+        assertEquals("shown again in this session", "a", p.current.value?.id)
     }
 
     @Test

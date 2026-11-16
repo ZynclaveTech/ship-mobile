@@ -28,11 +28,11 @@ internal data class ShipEnvelope(
 
 /** One content-addressed file in a release. */
 @Serializable
-data class ShipAsset(val name: String, val sha256: String, val size: Long)
+public data class ShipAsset(val name: String, val sha256: String, val size: Long)
 
 /** The signed description of one release (schema 1). */
 @Serializable
-data class ShipManifest(
+public data class ShipManifest(
     val schema: Int,
     @SerialName("release_id") val releaseId: String,
     val app: String,
@@ -46,8 +46,9 @@ data class ShipManifest(
 )
 
 /** A pinned verification key, as served by `/v1/apps/{app}/keys`. */
-class PinnedKey private constructor(val kid: String, private val verifier: Ed25519Verify) {
-    fun verifies(signature: ByteArray, message: ByteArray): Boolean =
+public class PinnedKey private constructor(public val kid: String, private val verifier: Ed25519Verify) {
+    /** Whether [signature] is this key's Ed25519 signature over [message]. */
+    public fun verifies(signature: ByteArray, message: ByteArray): Boolean =
         try {
             verifier.verify(signature, message)
             true
@@ -55,9 +56,9 @@ class PinnedKey private constructor(val kid: String, private val verifier: Ed255
             false
         }
 
-    companion object {
+    public companion object {
         /** [base64] is the raw 32-byte Ed25519 public key; null if it isn't one. */
-        fun of(kid: String, base64: String): PinnedKey? {
+        public fun of(kid: String, base64: String): PinnedKey? {
             val raw = decodeBase64(base64) ?: return null
             if (raw.size != Ed25519Verify.PUBLIC_KEY_LEN) return null
             return PinnedKey(kid, Ed25519Verify(raw))
@@ -66,7 +67,7 @@ class PinnedKey private constructor(val kid: String, private val verifier: Ed255
 }
 
 /** What the asking device expects; a validly signed manifest for anything else is rejected. */
-data class ShipExpectation(
+public data class ShipExpectation(
     val app: String,
     val runtime: String,
     val channel: String,
@@ -75,18 +76,19 @@ data class ShipExpectation(
     val minSeq: Long = 0,
 )
 
-sealed class ShipException(message: String) : Exception(message) {
-    class Malformed(detail: String) : ShipException("malformed: $detail")
-    class BadSignature : ShipException("bad signature")
-    class WrongTarget : ShipException("manifest is for another app, platform, channel or runtime")
-    class Stale : ShipException("older than the applied release")
-    class UnsafeAssetName(val name: String) : ShipException("unsafe asset name: $name")
-    class AssetMismatch(val name: String) : ShipException("asset does not match its hash: $name")
-    class Http(val status: Int) : ShipException("HTTP $status")
-    class TooLarge : ShipException("response larger than allowed")
+/** Why a sync or a verification failed. The message is short and safe to log. */
+public sealed class ShipException(message: String) : Exception(message) {
+    public class Malformed(detail: String) : ShipException("malformed: $detail")
+    public class BadSignature : ShipException("bad signature")
+    public class WrongTarget : ShipException("manifest is for another app, platform, channel or runtime")
+    public class Stale : ShipException("older than the applied release")
+    public class UnsafeAssetName(public val name: String) : ShipException("unsafe asset name: $name")
+    public class AssetMismatch(public val name: String) : ShipException("asset does not match its hash: $name")
+    public class Http(public val status: Int) : ShipException("HTTP $status")
+    public class TooLarge : ShipException("response larger than allowed")
 }
 
-object ManifestVerifier {
+public object ManifestVerifier {
     /** Prefix of every signed message, so a Ship signature can't be replayed as anything else. */
     private val signingDomain = "zynclave-ship/manifest/v1\n".toByteArray()
 
@@ -100,7 +102,7 @@ object ManifestVerifier {
     internal fun signingInput(payload: ByteArray): ByteArray = signingDomain + sha256Hex(payload).toByteArray()
 
     /** Verifies the envelope against [pinned], then the manifest against [expect]. */
-    fun verify(raw: ByteArray, pinned: List<PinnedKey>, expect: ShipExpectation): ShipManifest {
+    public fun verify(raw: ByteArray, pinned: List<PinnedKey>, expect: ShipExpectation): ShipManifest {
         val env = try {
             json.decodeFromString<ShipEnvelope>(raw.decodeToString())
         } catch (e: SerializationException) {
