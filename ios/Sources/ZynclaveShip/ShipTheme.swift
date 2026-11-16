@@ -16,14 +16,18 @@ public struct ShipRGBA: Equatable, Sendable {
 }
 
 /// Theme color overrides from `config/theme.json` of the applied release:
-/// `{"primary300": "#FF7A00"}` or `{"primary300": {"light": "#..", "dark": "#.."}}`.
+/// `{"primary": "#FF7A00"}` or `{"primary": {"light": "#..", "dark": "#.."}}`.
 ///
-/// Only allowlisted tokens are honoured, and a bad value (wrong shape, bad
+/// Only allowed tokens are honoured (the lookups take the allowed set,
+/// default ``defaultTokens``), and a bad value (wrong shape, bad
 /// hex) means "no override", so a bad file can never make an app unreadable.
 public enum ShipTheme {
-    /// Theme tokens a release may override. Backgrounds, surfaces and text
-    /// colors are deliberately absent.
-    static let allowlist: Set<String> = ["primary300", "primary200", "accent500"]
+    /// The SDUI colour tokens a release may override by default, the ones the
+    /// Ship validator accepts. A host app with its own palette passes its own
+    /// names as `allowed` to the lookups.
+    public static let defaultTokens: Set<String> = [
+        "primary", "accent", "surface", "surfaceVariant", "onSurface", "onSurfaceVariant", "onPrimary",
+    ]
 
     struct Pair: Equatable, Sendable {
         let light: ShipRGBA
@@ -32,10 +36,16 @@ public enum ShipTheme {
 
     private static let cache = ReleaseCache<[String: Pair]>(empty: [:])
 
-    static func parse(_ data: Data) -> [String: Pair] {
+    /// Parses `data`, keeping only the tokens in `allowed`.
+    static func parse(_ data: Data, allowed: Set<String> = defaultTokens) -> [String: Pair] {
+        parseAll(data).filter { allowed.contains($0.key) }
+    }
+
+    /// Every token with a valid value, whatever its name.
+    private static func parseAll(_ data: Data) -> [String: Pair] {
         guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [:] }
         var out: [String: Pair] = [:]
-        for (token, value) in obj where allowlist.contains(token) {
+        for (token, value) in obj {
             if let hex = value as? String, let c = rgba(hex) {
                 out[token] = Pair(light: c, dark: c)
             } else if let pair = value as? [String: Any],
@@ -60,10 +70,14 @@ public enum ShipTheme {
         return dark ? p.dark : p.light
     }
 
-    /// The override for an allowlisted token in the applied release, or nil.
-    public static func color(_ token: String, dark: Bool, in content: ShipContent) -> ShipRGBA? {
+    /// The override for `token` in the applied release, or nil. Only tokens in
+    /// `allowed` are honoured. The cache holds the unfiltered parse, so it is
+    /// right for any `allowed` set.
+    public static func color(_ token: String, dark: Bool, in content: ShipContent,
+                             allowed: Set<String> = defaultTokens) -> ShipRGBA? {
+        guard allowed.contains(token) else { return nil }
         let theme = cache.value(for: content) {
-            content.url(for: "config/theme.json").flatMap { try? Data(contentsOf: $0) }.map(parse) ?? [:]
+            content.url(for: "config/theme.json").flatMap { try? Data(contentsOf: $0) }.map(parseAll) ?? [:]
         }
         return color(token, dark: dark, in: theme)
     }

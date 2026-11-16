@@ -29,34 +29,54 @@ import Testing
 
     @Test func themeParsesPlainAndLightDarkPairs() {
         let t = ShipTheme.parse(data(
-            ##"{"primary300": "#FF7A00", "accent500": {"light": "#102030", "dark": "405060"}}"##))
+            ##"{"primary": "#FF7A00", "accent": {"light": "#102030", "dark": "405060"}}"##))
         let plain = ShipRGBA(r: 1, g: Double(0x7A) / 255, b: 0, a: 1)
-        #expect(ShipTheme.color("primary300", dark: false, in: t) == plain)
-        #expect(ShipTheme.color("primary300", dark: true, in: t) == plain)
-        #expect(ShipTheme.color("accent500", dark: false, in: t) == ShipRGBA(r: 16 / 255, g: 32 / 255, b: 48 / 255, a: 1))
-        #expect(ShipTheme.color("accent500", dark: true, in: t) == ShipRGBA(r: 64 / 255, g: 80 / 255, b: 96 / 255, a: 1))
+        #expect(ShipTheme.color("primary", dark: false, in: t) == plain)
+        #expect(ShipTheme.color("primary", dark: true, in: t) == plain)
+        #expect(ShipTheme.color("accent", dark: false, in: t) == ShipRGBA(r: 16 / 255, g: 32 / 255, b: 48 / 255, a: 1))
+        #expect(ShipTheme.color("accent", dark: true, in: t) == ShipRGBA(r: 64 / 255, g: 80 / 255, b: 96 / 255, a: 1))
     }
 
     @Test func badHexAndUnlistedTokensAreRejected() {
         let t = ShipTheme.parse(data(
-            ##"{"primary300": "#GG0000", "primary200": "#FFF", "accent500": {"light": "#102030"}, "background": "#000000"}"##))
+            ##"{"primary": "#GG0000", "primary200": "#FFF", "accent": {"light": "#102030"}, "background": "#000000"}"##))
         #expect(t.isEmpty)
+    }
+
+    @Test func tokenOutsideAllowlistIgnored() async throws {
+        let f = Fixture()
+        let theme = try JSONSerialization.data(
+            withJSONObject: ["primary": "#FF7A00", "brand500": "#102030", "background": "#000000"])
+        var a = f.cdn.blob(theme); a["name"] = "config/theme.json"
+        f.cdn.set("/v1/manifest", try f.signer.envelope(manifest(seq: 1, assets: [a])))
+        let c = f.client()
+        try await c.sync()
+        #expect(ShipTheme.color("primary", dark: false, in: c.content) != nil)
+        #expect(ShipTheme.color("brand500", dark: false, in: c.content) == nil)   // not a default token
+        #expect(ShipTheme.color("background", dark: false, in: c.content) == nil) // never allowed
+        // Same release, another allowlist: the cached parse must not leak the first filter.
+        #expect(ShipTheme.color("brand500", dark: false, in: c.content, allowed: ["brand500"])
+                == ShipRGBA(r: 16 / 255, g: 32 / 255, b: 48 / 255, a: 1))
+        #expect(ShipTheme.color("primary", dark: false, in: c.content, allowed: ["brand500"]) == nil)
+        #expect(ShipTheme.color("primary", dark: false, in: c.content) != nil)
+        #expect(ShipTheme.defaultTokens == ["primary", "accent", "surface", "surfaceVariant",
+                                            "onSurface", "onSurfaceVariant", "onPrimary"])
     }
 
     @Test func lookupsReadAppliedReleaseAndRevertMeansNone() async throws {
         let f = Fixture()
         let flags = try JSONSerialization.data(withJSONObject: ["beta": true])
-        let theme = try JSONSerialization.data(withJSONObject: ["primary300": "#FF7A00"])
+        let theme = try JSONSerialization.data(withJSONObject: ["primary": "#FF7A00"])
         var a1 = f.cdn.blob(flags); a1["name"] = "config/flags.json"
         var a2 = f.cdn.blob(theme); a2["name"] = "config/theme.json"
         f.cdn.set("/v1/manifest", try f.signer.envelope(manifest(seq: 1, assets: [a1, a2])))
         let c = f.client()
         try await c.sync()
         #expect(ShipFlags.bool("beta", in: c.content) == true)
-        #expect(ShipTheme.color("primary300", dark: false, in: c.content) != nil)
+        #expect(ShipTheme.color("primary", dark: false, in: c.content) != nil)
         f.cdn.set("/v1/manifest", try f.signer.envelope(manifest(seq: 2, runtime: "*", revert: true)))
         try await c.sync()
         #expect(ShipFlags.bool("beta", in: c.content) == nil)
-        #expect(ShipTheme.color("primary300", dark: false, in: c.content) == nil)
+        #expect(ShipTheme.color("primary", dark: false, in: c.content) == nil)
     }
 }

@@ -16,8 +16,9 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// The URL scheme a `deeplink` action must use, e.g. `myapp`.
     public var deeplinkScheme: String
     /// A theme token (`primary`, `accent`, `surface`, `surfaceVariant`, `onSurface`,
-    /// `onSurfaceVariant`, `onPrimary`) to the app's colour. `nil` falls back to
-    /// the release's `config/theme.json`, then to an SDK default.
+    /// `onSurfaceVariant`, `onPrimary`) to the app's colour. Resolution order:
+    /// the release's `config/theme.json` for that token (when it is in
+    /// `themeTokens`), then this, then an SDK default. Return `nil` to decline.
     public var color: (String) -> Color?
     /// Opens a `deeplink` action through the app's own routing.
     public var openDeeplink: (URL) -> Void
@@ -54,6 +55,10 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// The bundle holding `ShipEmbedded/sdui/popups/*.json` (and the assets
     /// they name under `ShipEmbedded/`). They show without any Ship release.
     public var embeddedPopups: Bundle?
+    /// The tokens a release's `config/theme.json` may override. Default:
+    /// ``ShipTheme/defaultTokens``, the SDUI colour tokens. A host app with its
+    /// own palette lists its own names here.
+    public var themeTokens: Set<String>
 
     public init(
         deeplinkScheme: String,
@@ -68,7 +73,8 @@ public struct ShipUIOptions: @unchecked Sendable {
         onPopupClosed: @escaping (SDUI.Popup) -> Void = { _ in },
         analytics: ShipAnalyticsSink? = nil,
         components: [String: (SDUI.CustomNode) -> AnyView] = [:],
-        embeddedPopups: Bundle? = nil
+        embeddedPopups: Bundle? = nil,
+        themeTokens: Set<String> = ShipTheme.defaultTokens
     ) {
         self.deeplinkScheme = deeplinkScheme
         self.color = color
@@ -83,6 +89,7 @@ public struct ShipUIOptions: @unchecked Sendable {
         self.analytics = analytics
         self.components = components
         self.embeddedPopups = embeddedPopups
+        self.themeTokens = themeTokens
     }
 }
 
@@ -120,19 +127,16 @@ struct ShipRuntime: @unchecked Sendable {
         return content.string(key, locale: options.language())
     }
 
-    /// Option colour, then the release theme, then the SDK default.
+    /// The release theme (if the token is allowed), then the option colour,
+    /// then the SDK default.
     func color(_ token: String, dark: Bool) -> Color {
-        if let c = options.color(token) { return c }
         if let content, content.state?.revertToEmbedded == false,
-           let name = Self.themeNames[token],
-           let c = ShipTheme.color(name, dark: dark, in: content) {
+           let c = ShipTheme.color(token, dark: dark, in: content, allowed: options.themeTokens) {
             return Color(.sRGB, red: c.r, green: c.g, blue: c.b, opacity: c.a)
         }
+        if let c = options.color(token) { return c }
         return Self.defaultColor(token, dark: dark)
     }
-
-    /// SDUI tokens that a release's `config/theme.json` may override.
-    static let themeNames = ["primary": "primary300", "accent": "accent500"]
 
     static func defaultColor(_ token: String, dark: Bool) -> Color {
         func hex(_ v: UInt32) -> Color {

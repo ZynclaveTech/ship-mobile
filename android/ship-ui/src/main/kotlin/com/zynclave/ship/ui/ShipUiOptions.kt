@@ -41,8 +41,9 @@ data class ShipUiOptions(
     /**
      * A theme token (`primary`, `accent`, `surface`, `surfaceVariant`,
      * `onSurface`, `onSurfaceVariant`, `onPrimary`) to the app's colour.
-     * null falls back to the release's `config/theme.json`, then to a default
-     * (Material theme colours for the surface and text tokens).
+     * Resolution order: the release's `config/theme.json` for that token (when
+     * it is in [themeTokens]), then this, then a default (Material theme
+     * colours for the surface and text tokens). Return null to decline.
      */
     val color: (token: String, dark: Boolean) -> Color? = { _, _ -> null },
     /** Opens a `deeplink` action through the app's own routing. */
@@ -94,6 +95,12 @@ data class ShipUiOptions(
      * `ship-embedded`. They show without any Ship release.
      */
     val embeddedPopupsAssetDir: String? = null,
+    /**
+     * The tokens a release's `config/theme.json` may override. Default:
+     * [ShipTheme.DEFAULT_TOKENS], the SDUI colour tokens. A host app with its
+     * own palette lists its own names here.
+     */
+    val themeTokens: Set<String> = ShipTheme.DEFAULT_TOKENS,
 )
 
 /** The device's primary language code, e.g. `hi`. */
@@ -123,16 +130,13 @@ internal class ShipRuntime(
     private fun ota(key: String): String? =
         content?.takeIf { it.state?.revertToEmbedded == false }?.string(key, options.language())
 
-    /** The app's colour, then the release's theme; null when neither has one (the caller supplies the default). */
+    /**
+     * The release's theme override for [token] (if allowed), then the app's
+     * colour; null when neither has one (the caller supplies the default).
+     */
     fun color(token: String, dark: Boolean): Color? {
-        options.color(token, dark)?.let { return it }
-        val name = themeNames[token] ?: return null
-        return ShipTheme.color(name, dark, content)?.let { Color(it.toInt()) }
-    }
-
-    companion object {
-        /** SDUI tokens that a release's `config/theme.json` may override. */
-        val themeNames = mapOf("primary" to "primary300", "accent" to "accent500")
+        ShipTheme.color(token, dark, content, options.themeTokens)?.let { return Color(it.toInt()) }
+        return options.color(token, dark)
     }
 }
 

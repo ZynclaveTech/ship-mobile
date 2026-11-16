@@ -62,9 +62,11 @@ class ShipViewsTest {
         appString: (String) -> String? = { null },
         color: (String, Boolean) -> Color? = { _, _ -> null },
         components: Map<String, @androidx.compose.runtime.Composable (Sdui.Node.Custom) -> Unit> = emptyMap(),
+        themeTokens: Set<String> = com.zynclave.ship.ShipTheme.DEFAULT_TOKENS,
     ) = ShipUiOptions(
         deeplinkScheme = TEST_SCHEME, openDeeplink = { opened += it }, language = language,
         appString = appString, color = color, analytics = sink, components = components,
+        themeTokens = themeTokens,
     )
 
     private fun cards(client: ShipClient = testClient(temp.newFolder()), options: ShipUiOptions = options()) =
@@ -145,16 +147,40 @@ class ShipViewsTest {
     }
 
     @Test
-    fun `a colour comes from the app, then the release theme, then the SDK default`() {
-        val theme = mapOf("config/theme.json" to text("""{"primary300": "#FF7A00"}"""))
+    fun `a colour comes from the release theme, then the app, then the SDK default`() {
+        val theme = mapOf("config/theme.json" to text("""{"primary": "#FF7A00"}"""))
         val withTheme = runtime(theme)
         assertEquals(Color(0xFFFF7A00), withTheme.color("primary", dark = false))
-        assertNull("not overridable by a release", withTheme.color("surface", dark = false))
-        val app = runtime(theme, options = options(color = { token, dark -> if (token == "primary") Color.Red.takeIf { !dark } else null }))
-        assertEquals(Color.Red, app.color("primary", dark = false))
-        assertEquals("the app declined for dark: the release applies", Color(0xFFFF7A00), app.color("primary", dark = true))
+        assertNull("the release has no surface", withTheme.color("surface", dark = false))
+        val app = runtime(theme, options = options(color = { token, _ -> if (token == "surface") Color.Red else null }))
+        assertEquals("the release has no surface: the app's applies", Color.Red, app.color("surface", dark = false))
+        assertEquals(Color(0xFFFF7A00), app.color("primary", dark = true))
         assertNull(runtime().color("primary", dark = false))
         assertNull("a revert drops the release theme", runtime(theme, revert = true).color("primary", dark = false))
+    }
+
+    @Test
+    fun defaultTokensOverrideSduiColour() {
+        val theme = mapOf("config/theme.json" to text("""{"primary": "#112233"}"""))
+        val rt = runtime(theme, options = options(color = { _, _ -> Color.Red }))
+        assertEquals("the release beats the app", Color(0xFF112233), rt.color("primary", dark = false))
+        assertEquals("a token the release leaves alone is the app's", Color.Red, rt.color("accent", dark = false))
+    }
+
+    @Test
+    fun customTokenListIsHonoured() {
+        val theme = mapOf("config/theme.json" to text("""{"brand500": "#112233", "primary": "#445566"}"""))
+        val rt = runtime(theme, options = options(themeTokens = setOf("brand500")))
+        assertEquals(Color(0xFF112233), rt.color("brand500", dark = false))
+        assertNull("primary is not on this app's list", rt.color("primary", dark = false))
+    }
+
+    @Test
+    fun tokenOutsideAllowlistIgnored() {
+        val theme = mapOf("config/theme.json" to text("""{"brand500": "#112233", "background": "#000000"}"""))
+        val rt = runtime(theme, options = options(color = { _, _ -> Color.Red }))
+        assertEquals("brand500 is not a default token: the app's colour stands", Color.Red, rt.color("brand500", dark = false))
+        assertEquals(Color.Red, rt.color("background", dark = false))
     }
 
     // ----- views -----

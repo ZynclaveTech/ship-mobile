@@ -37,11 +37,11 @@ func cardJSON(id: String, priority: Int = 0) -> Data {
 
 /// A client whose applied release is already on disk, as after a sync.
 /// `files` maps release path -> content.
-func client(root: URL, files: [String: Data], revert: Bool = false) -> ShipClient {
+func client(root: URL, files: [String: Data], revert: Bool = false, releaseID: String = "rel-1") -> ShipClient {
     let cur = root.appending(path: "current")
     for (name, data) in files { write(data, to: cur.appending(path: name)) }
     let state: [String: Any] = [
-        "app": "sample", "channel": "prod", "runtime": "rt-1", "releaseID": "rel-1", "seq": 1,
+        "app": "sample", "channel": "prod", "runtime": "rt-1", "releaseID": releaseID, "seq": 1,
         "revertToEmbedded": revert, "assets": files.keys.sorted(),
     ]
     write(try! JSONSerialization.data(withJSONObject: state), to: cur.appending(path: ".ship-state.json"))

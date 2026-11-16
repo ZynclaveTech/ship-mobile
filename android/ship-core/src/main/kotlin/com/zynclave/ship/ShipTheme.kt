@@ -6,19 +6,22 @@ import kotlinx.serialization.json.contentOrNull
 
 /*
  * Theme color overrides from `config/theme.json` of the applied release:
- * `{"primary300": "#FF7A00"}` or `{"primary300": {"light": "#..", "dark": "#.."}}`.
+ * `{"primary": "#FF7A00"}` or `{"primary": {"light": "#..", "dark": "#.."}}`.
  *
- * Only allowlisted tokens are honoured, and a bad value (wrong shape, bad
+ * Only allowed tokens are honoured (the lookups take the allowed set, default
+ * [DEFAULT_TOKENS]), and a bad value (wrong shape, bad
  * hex) means "no override", so a bad file can never make an app unreadable.
  * Colors are returned as ARGB longs (`0xFFRRGGBB`), independent of any UI toolkit.
  */
 object ShipTheme {
     /**
-     * Theme tokens a release may override. Backgrounds, surfaces and text
-     * colors are deliberately absent: a bad file must never be able to make
-     * the app unreadable.
+     * The SDUI colour tokens a release may override by default, the ones the
+     * Ship validator accepts. A host app with its own palette passes its own
+     * names as `allowed` to the lookups.
      */
-    val allowlist: Set<String> = setOf("primary300", "primary200", "accent500")
+    val DEFAULT_TOKENS: Set<String> = setOf(
+        "primary", "accent", "surface", "surfaceVariant", "onSurface", "onSurfaceVariant", "onPrimary",
+    )
 
     data class ThemeColor(val light: Long, val dark: Long)
 
@@ -26,12 +29,16 @@ object ShipTheme {
 
     @Volatile private var cache: Cached? = null
 
-    fun parse(text: String): Map<String, ThemeColor> {
+    /** Parses [text], keeping only the tokens in [allowed]. */
+    fun parse(text: String, allowed: Set<String> = DEFAULT_TOKENS): Map<String, ThemeColor> =
+        parseAll(text).filterKeys { it in allowed }
+
+    /** Every token with a valid value, whatever its name. */
+    private fun parseAll(text: String): Map<String, ThemeColor> {
         val obj = runCatching { ManifestVerifier.json.parseToJsonElement(text) as? JsonObject }.getOrNull()
             ?: return emptyMap()
         val out = HashMap<String, ThemeColor>()
         for ((token, value) in obj) {
-            if (token !in allowlist) continue
             when (value) {
                 is JsonPrimitive -> hexColor(value)?.let { out[token] = ThemeColor(it, it) }
                 is JsonObject -> {
@@ -57,15 +64,23 @@ object ShipTheme {
     fun color(token: String, dark: Boolean, theme: Map<String, ThemeColor>): Long? =
         theme[token]?.let { if (dark) it.dark else it.light }
 
-    /** The override for an allowlisted [token] in the applied release, or null. [dark] is the host's current mode. */
-    fun color(token: String, dark: Boolean, content: ShipContent?): Long? = color(token, dark, theme(content))
+    /**
+     * The override for [token] in the applied release, or null. Only tokens in
+     * [allowed] are honoured. [dark] is the host's current mode.
+     */
+    fun color(token: String, dark: Boolean, content: ShipContent?, allowed: Set<String> = DEFAULT_TOKENS): Long? =
+        if (token in allowed) color(token, dark, theme(content)) else null
 
-    /** Parsed once per release, so the many color reads per frame cost a field read and a map lookup. */
+    /**
+     * Parsed once per release with no token filter, so the cache is right for
+     * any [allowed] set: the caller filters. Many color reads per frame cost
+     * a field read and a map lookup.
+     */
     private fun theme(content: ShipContent?): Map<String, ThemeColor> {
         val state = content?.state
         if (content == null || state == null || state.revertToEmbedded) return emptyMap()
         cache?.takeIf { it.content === content && it.releaseId == state.releaseId }?.let { return it.theme }
-        val parsed = content.file("config/theme.json")?.let { f -> runCatching { parse(f.readText()) }.getOrNull() }.orEmpty()
+        val parsed = content.file("config/theme.json")?.let { f -> runCatching { parseAll(f.readText()) }.getOrNull() }.orEmpty()
         cache = Cached(content, state.releaseId, parsed)
         return parsed
     }
