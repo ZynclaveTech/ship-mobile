@@ -1,0 +1,5 @@
+<resources>
+    <string name="welcome_name">Welcome, %1$s</string>
+    <string name="code_sent_to">Enter the code sent to %1$s</string>
+    <string name="too_long">Too long for %1$s.</string>
+</resources>
