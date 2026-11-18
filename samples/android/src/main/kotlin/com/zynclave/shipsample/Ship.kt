@@ -20,7 +20,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.io.File
 
 /** The release's public key. Replace it with the key your Ship app gives you. */
-const val SAMPLE_PUBLIC_KEY = "REPLACE_WITH_SHIP_SAMPLE_PUBLIC_KEY"
+const val SAMPLE_PUBLIC_KEY = "2iX4H1QZbH2lPtz8hvFK1bCXWHXAUV8N0mGvR+Hn52c="
 
 /** Created once per process, so Ship's popup state is never duplicated. */
 class SampleApp : Application() {

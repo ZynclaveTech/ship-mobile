@@ -5,7 +5,7 @@ import ZynclaveShipUI
 
 /// The release's public key. Replace it with the key your Ship app gives you.
 enum SampleKey {
-    static let publicKey = "REPLACE_WITH_SHIP_SAMPLE_PUBLIC_KEY"
+    static let publicKey = "2iX4H1QZbH2lPtz8hvFK1bCXWHXAUV8N0mGvR+Hn52c="
     static var isPlaceholder: Bool { publicKey == "REPLACE_WITH_SHIP_SAMPLE_PUBLIC_KEY" }
 }
 
