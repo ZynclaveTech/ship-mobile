@@ -15,14 +15,11 @@ def pixel(x, y):
     # sun
     if (x - 460) ** 2 + (y - 90) ** 2 < 45 ** 2:
         return 255, 214, 102
-    # rolling hills
-    if y > 200 + 25 * ((x - 150) / 150) ** 2 - 25 and x < 300:
+    # two rolling hills across the whole width; the nearer one is drawn first
+    if y > 215 + 35 * ((x - 140) / 220) ** 2:
         return 40, 92, 200
-    if y > 215 + 20 * ((x - 450) / 150) ** 2 - 20 and x >= 300:
+    if y > 190 + 40 * ((x - 430) / 260) ** 2:
         return 28, 70, 160
-    # triangle
-    if 180 < y < 250 and abs(x - 300) < (y - 180) * 0.9:
-        return 255, 255, 255
     return r, g, b
 
 
