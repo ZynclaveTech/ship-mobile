@@ -1,0 +1,5 @@
+{"schema": 1, "id": "built-in", "audience": "all", "priority": 1,
+ "body": {"type": "vstack", "children": [
+   {"type": "lottie", "src": "lottie/spin.json", "height": 80},
+   {"type": "text", "key": "built_in_title", "fallback": "From the app"}
+ ]}}

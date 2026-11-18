@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "spring-wishes",
+  "priority": 5,
+  "body": {
+    "type": "vstack",
+    "padding": 24,
+    "children": [
+      {
+        "type": "lottie",
+        "src": "lottie/hello.json",
+        "height": 200
+      },
+      {
+        "type": "text",
+        "fallback": "Hello!",
+        "style": "title"
+      },
+      {
+        "type": "button",
+        "label": {
+          "fallback": "Read more"
+        },
+        "style": "secondary",
+        "action": {
+          "type": "web",
+          "url": "https://example.com/spring"
+        }
+      },
+      {
+        "type": "button",
+        "label": {
+          "fallback": "Later"
+        },
+        "style": "text",
+        "action": {
+          "type": "dismiss"
+        }
+      }
+    ]
+  }
+}

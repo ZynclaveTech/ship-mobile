@@ -1,0 +1,9 @@
+{
+  "payload": "eyJzY2hlbWEiOjEsInJlbGVhc2VfaWQiOiJ0ZXN0LXZlY3Rvci1hbmRyb2lkIiwiYXBwIjoic2hpcC1zYW1wbGUiLCJwbGF0Zm9ybSI6ImFuZHJvaWQiLCJydW50aW1lIjoiYW5kcm9pZC0xLjAuMCIsImNoYW5uZWwiOiJ0ZXN0ZmxpZ2h0Iiwic2VxIjo4LCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE2VDEyOjAwOjAwWiIsImFzc2V0cyI6W3sibmFtZSI6InN0cmluZ3MvZW4uanNvbiIsInNoYTI1NiI6ImJhODY4OGY5NDNiYTM0NDZkN2NlNjM5YWMwMjFjYjFhZDI0MjQ2ZWUyNWVjMmE2ODUyNzk2ZjMyYjQ2NGYyZDEiLCJzaXplIjozOH1dfQ==",
+  "signatures": [
+    {
+      "kid": "test-vector-1",
+      "sig": "2lOhd/IJQAx41WTOaExnE9Qf1C16DCZMA2CdYsow+ndgY/+xg5pgCj5oZWbefzBbyMtKMP4Pn727iAwb/imnBg=="
+    }
+  ]
+}

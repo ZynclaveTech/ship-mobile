@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "spring-wishes",
+  "audience": "all",
+  "priority": 5,
+  "body": {
+    "type": "button",
+    "label": {
+      "fallback": "Go"
+    },
+    "style": 2,
+    "action": {
+      "type": "dismiss"
+    }
+  }
+}

@@ -1,1 +1,17 @@
 .superpowers/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+DerivedData/
+local.properties
+.gradle/
+build/
+.idea/
+*.keystore
+*.jks
+.netrc
+Package.resolved
+# Xcode build output
+*.xcarchive
+*.dSYM/

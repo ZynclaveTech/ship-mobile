@@ -1,0 +1,2 @@
+{"schema": 1, "id": "shared", "audience": "all", "priority": 9,
+ "body": {"type": "text", "fallback": "Embedded copy"}}

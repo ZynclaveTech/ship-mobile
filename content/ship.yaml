@@ -1,0 +1,10 @@
+api: https://api.ship.zynclave.com
+app: ship-sample
+deeplink_scheme: shipsample
+platforms:
+  android:
+    runtime: android-1.0.0
+    assets: ota/android
+  ios:
+    runtime: ios-1.0.0
+    assets: ota/ios
