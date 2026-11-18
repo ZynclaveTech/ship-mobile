@@ -155,7 +155,7 @@ internal fun SduiNode(node: Sdui.Node, onDismiss: () -> Unit, modifier: Modifier
             val primary = tokenColor("primary")
             val (fill, ink) = when (node.style) {
                 "primary" -> primary to tokenColor("onPrimary")
-                "secondary" -> tokenColor("surface") to primary
+                "secondary" -> tokenColor("surfaceVariant") to primary
                 else -> Color.Transparent to primary
             }
             val text = node.style == "text"
