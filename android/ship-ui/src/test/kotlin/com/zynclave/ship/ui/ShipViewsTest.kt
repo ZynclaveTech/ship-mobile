@@ -58,7 +58,7 @@ class ShipViewsTest {
     }
 
     private fun options(
-        language: () -> String = { "en" },
+        language: (() -> String)? = { "en" },
         appString: (String) -> String? = { null },
         color: (String, Boolean) -> Color? = { _, _ -> null },
         components: Map<String, @androidx.compose.runtime.Composable (Sdui.Node.Custom) -> Unit> = emptyMap(),
@@ -125,25 +125,37 @@ class ShipViewsTest {
     }
 
     @Test
-    fun defaultLanguageMapsLegacyCodes() {
-        val saved = java.util.Locale.getDefault()
-        try {
-            java.util.Locale.setDefault(java.util.Locale("in"))
-            val default = ShipUiOptions(deeplinkScheme = TEST_SCHEME, openDeeplink = {})
-            assertEquals("id", default.language())
-            val client = testClient(temp.newFolder(), "r1", mapOf("strings/id.json" to text("""{"title": "OTA indonesian"}""")))
-            assertEquals("OTA indonesian", ShipRuntime(default, client.content).text(Sdui.TextValue("title", "literal")))
-            java.util.Locale.setDefault(java.util.Locale("iw"))
-            assertEquals("he", default.language())
-        } finally {
-            java.util.Locale.setDefault(saved)
-        }
+    fun configurationLanguageMapsLegacyCodes() {
+        assertEquals("id", configurationLanguage("in"))
+        assertEquals("he", configurationLanguage("iw"))
+        assertEquals("fr", configurationLanguage("fr"))
+        assertEquals("en", configurationLanguage(""))
+        assertEquals("en", configurationLanguage(null))
     }
 
     @Test
-    fun `the default language is the device's`() {
-        val default = ShipUiOptions(deeplinkScheme = TEST_SCHEME, openDeeplink = {})
-        assertEquals(com.zynclave.ship.ShipStrings.releaseLanguage(java.util.Locale.getDefault().language.ifEmpty { "en" }), default.language())
+    fun `by default text follows the language of the resources it is drawn with`() {
+        val client = testClient(temp.newFolder(), "r1", mapOf(
+            "strings/id.json" to text("""{"title": "OTA indonesian"}"""),
+            "strings/en.json" to text("""{"title": "OTA english"}"""),
+        ))
+        val cards = cards(client, options(language = null))
+        val config = android.content.res.Configuration(app.resources.configuration).apply {
+            setLocale(java.util.Locale("in")) // an in-app picker, not the device locale
+        }
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides config) {
+                MaterialTheme { ShipCard(card("""{"type": "text", "key": "title", "fallback": "literal"}"""), cards) }
+            }
+        }
+        compose.onNodeWithText("OTA indonesian").assertExists()
+    }
+
+    @Test
+    fun `an app-set language wins over the resources`() {
+        val client = testClient(temp.newFolder(), "r1", mapOf("strings/hi.json" to text("""{"title": "OTA hindi"}""")))
+        show(card("""{"type": "text", "key": "title", "fallback": "literal"}"""), cards(client, options(language = { "hi" })))
+        compose.onNodeWithText("OTA hindi").assertExists()
     }
 
     @Test

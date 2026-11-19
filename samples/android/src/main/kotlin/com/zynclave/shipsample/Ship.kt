@@ -46,7 +46,7 @@ class Ship(context: Context) {
     val client: ShipClient?
     val cards: ShipCards?
     val popups: ShipPopups?
-    private val options: ShipUiOptions?
+    val options: ShipUiOptions?
 
     val channel = if (BuildConfig.DEBUG) "testflight" else "production"
     val runtime = "android-" + BuildConfig.VERSION_NAME
@@ -66,9 +66,6 @@ class Ship(context: Context) {
         private set
 
     val content: ShipContent? get() = client?.content
-
-    /** The language Ship uses for text, so the greeting matches popups. */
-    val language: String get() = options?.language?.invoke() ?: "en"
 
     init {
         val key = when {

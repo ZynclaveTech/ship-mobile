@@ -101,6 +101,7 @@ internal fun SduiNode(node: Sdui.Node, onDismiss: () -> Unit, modifier: Modifier
     val context = LocalContext.current
     val runtime = LocalShipRuntime.current
     val actionWillRun = LocalShipComponentWillAct.current
+    val language = runtime.options.currentLanguage()
     when (node) {
         is Sdui.Node.Stack -> {
             val background = node.background?.let { tokenColor(it) }
@@ -131,7 +132,7 @@ internal fun SduiNode(node: Sdui.Node, onDismiss: () -> Unit, modifier: Modifier
             }
         }
         is Sdui.Node.Text -> Text(
-            text = runtime.text(node.value),
+            text = runtime.text(node.value, language),
             style = textStyle(node.style),
             color = tokenColor(node.color ?: "onSurface"),
             maxLines = node.maxLines ?: Int.MAX_VALUE,
@@ -171,14 +172,14 @@ internal fun SduiNode(node: Sdui.Node, onDismiss: () -> Unit, modifier: Modifier
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    runtime.text(node.label),
+                    runtime.text(node.label, language),
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = ink,
                 )
             }
         }
         is Sdui.Node.Badge -> Text(
-            runtime.text(node.text),
+            runtime.text(node.text, language),
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
             color = tokenColor("onPrimary"),
             modifier = modifier

@@ -117,6 +117,10 @@ Your host app has a few jobs:
 - When the signed-in user's eligibility changes, call `cards.refresh()`.
 - Pass what only your app knows through `ShipUIOptions` / `ShipUiOptions`: `eligibility`,
   `popupGate`, `appString`, `personalize`, `analytics`, `color` and `language`.
+- OTA strings are read in your app's language by default, not the device's: on iOS the
+  bundle's preferred localization, on Android the locale of the resources the popup or card
+  is drawn with (so a per-app language or an in-app picker applies). Set `language` to
+  override it; on Android, `options.currentLanguage()` gives the same code for your own text.
 
 ## Get your own workspace
 

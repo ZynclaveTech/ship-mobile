@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zynclave.ship.ShipFlags
 import com.zynclave.ship.ui.ShipCard
+import com.zynclave.ship.ui.currentLanguage
 import com.zynclave.ship.ui.rememberShipCards
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +46,9 @@ fun HomeScreen(ship: Ship) {
 @Composable
 private fun Header(ship: Ship) {
     // Re-read after each sync: the content object stays, the release it holds moves on.
-    val greeting = remember(ship.revision) { ship.content?.string("sample_greeting", ship.language) ?: "Hello" }
+    // The same language popups and cards use: the app's, via its resources.
+    val language = ship.options?.currentLanguage() ?: "en"
+    val greeting = remember(ship.revision, language) { ship.content?.string("sample_greeting", language) ?: "Hello" }
     val banner = remember(ship.revision) { ShipFlags.boolean("show_banner", ship.content) == true }
     Column {
         Text(greeting, style = MaterialTheme.typography.headlineSmall)
