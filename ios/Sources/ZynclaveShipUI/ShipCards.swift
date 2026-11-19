@@ -15,6 +15,10 @@ public final class ShipCards: ObservableObject {
     let options: ShipUIOptions
     private let defaults: UserDefaults
     private var cache: (release: String?, cards: [SDUI.Card]) = (nil, [])
+    /// The dismissed set this instance last published for, so a change made
+    /// through another instance (same defaults) is told apart from our own.
+    private var lastDismissed: Set<String>
+    private var observer: DefaultsObserver?
 
     public convenience init(client: ShipClient, options: ShipUIOptions) {
         self.init(client: client, options: options, defaults: .standard)
@@ -24,6 +28,23 @@ public final class ShipCards: ObservableObject {
         self.client = client
         self.options = options
         self.defaults = defaults
+        self.lastDismissed = Set(defaults.stringArray(forKey: Self.dismissedKey) ?? [])
+        // Another ShipCards on the same defaults dismissing a card shows up
+        // here; this instance then drops it at once as well.
+        observer = DefaultsObserver(defaults) { [weak self] in
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self?.defaultsChanged() }
+            } else {
+                Task { @MainActor in self?.defaultsChanged() }
+            }
+        }
+    }
+
+    private func defaultsChanged() {
+        let now = dismissed
+        guard now != lastDismissed else { return }
+        lastDismissed = now
+        objectWillChange.send()
     }
 
     var runtime: ShipRuntime { ShipRuntime(options: options, content: client.content) }
@@ -44,6 +65,7 @@ public final class ShipCards: ObservableObject {
     public func dismiss(_ id: String) {
         var d = dismissed
         guard d.insert(id).inserted else { return }
+        lastDismissed = d
         defaults.set(Array(d), forKey: Self.dismissedKey)
         analytics.dismiss(id)
         objectWillChange.send()
@@ -130,4 +152,17 @@ public struct ShipCardView: View {
         .environment(\.shipRuntime, cards.runtime)
         .environment(\.sduiAssetURL, SDUIAssetResolver(releaseID: content?.state?.releaseID) { content?.url(for: $0) })
     }
+}
+
+/// Calls `onChange` whenever `defaults` change; stops when released.
+private final class DefaultsObserver: @unchecked Sendable {
+    private let token: NSObjectProtocol
+
+    init(_ defaults: UserDefaults, onChange: @escaping @Sendable () -> Void) {
+        token = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: nil
+        ) { _ in onChange() }
+    }
+
+    deinit { NotificationCenter.default.removeObserver(token) }
 }

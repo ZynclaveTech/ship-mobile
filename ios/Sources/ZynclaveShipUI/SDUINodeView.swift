@@ -9,7 +9,7 @@ enum SDUIActions {
             // Through the app's own routing, so only routes it already supports do anything.
             options.openDeeplink(url)
         case .web(let url):
-            openURL(url)
+            if let openWeb = options.openWeb { openWeb(url) } else { openURL(url) }
         case .dismiss:
             dismiss()
         }

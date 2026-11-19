@@ -83,6 +83,11 @@ public struct ShipUIOptions: @unchecked Sendable {
     /// ``ShipTheme/defaultTokens``, the SDUI colour tokens. A host app with its
     /// own palette lists its own names here.
     public var themeTokens: Set<String>
+    /// Opens the URL of a `web` action (buttons and card taps), e.g. in the
+    /// app's own in-app browser. `nil` (the default) opens it the system way,
+    /// through the SwiftUI `openURL` environment. Only `https` URLs reach it:
+    /// the parser rejects any other `web` action.
+    public var openWeb: ((URL) -> Void)?
 
     public init(
         deeplinkScheme: String,
@@ -98,7 +103,8 @@ public struct ShipUIOptions: @unchecked Sendable {
         analytics: ShipAnalyticsSink? = nil,
         components: [String: (SDUI.CustomNode) -> AnyView] = [:],
         embeddedPopups: Bundle? = nil,
-        themeTokens: Set<String> = ShipTheme.defaultTokens
+        themeTokens: Set<String> = ShipTheme.defaultTokens,
+        openWeb: ((URL) -> Void)? = nil
     ) {
         Self.checkScheme(deeplinkScheme)
         self.deeplinkScheme = deeplinkScheme
@@ -115,6 +121,7 @@ public struct ShipUIOptions: @unchecked Sendable {
         self.components = components
         self.embeddedPopups = embeddedPopups
         self.themeTokens = themeTokens
+        self.openWeb = openWeb
     }
 }
 

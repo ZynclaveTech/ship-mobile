@@ -106,6 +106,64 @@ private struct ProbeTile: View {
         sub.cancel()
     }
 
+    // MARK: openWeb
+
+    @Test func openWebHookReceivesTheURLAndTheDefaultOpenerIsSkipped() {
+        var hooked: [URL] = []
+        var defaulted: [URL] = []
+        var options = ShipUIOptions(deeplinkScheme: "shipsample")
+        options.openWeb = { hooked.append($0) }
+        let url = URL(string: "https://example.com/a")!
+        SDUIActions.perform(.web(url), options: options, openURL: { defaulted.append($0) }, dismiss: {})
+        #expect(hooked == [url])
+        #expect(defaulted.isEmpty)
+    }
+
+    @Test func webActionUsesTheDefaultOpenerWhenNoHookIsSet() {
+        var defaulted: [URL] = []
+        let options = ShipUIOptions(deeplinkScheme: "shipsample")
+        #expect(options.openWeb == nil)
+        let url = URL(string: "https://example.com/b")!
+        SDUIActions.perform(.web(url), options: options, openURL: { defaulted.append($0) }, dismiss: {})
+        #expect(defaulted == [url])
+    }
+
+    @Test func openWebCanBePassedToTheInitialiser() {
+        var hooked: [URL] = []
+        let options = ShipUIOptions(deeplinkScheme: "shipsample", openWeb: { hooked.append($0) })
+        let url = URL(string: "https://example.com/c")!
+        SDUIActions.perform(.web(url), options: options, openURL: { _ in }, dismiss: {})
+        #expect(hooked == [url])
+    }
+
+    // MARK: Dismissals across instances
+
+    @Test func dismissingInOneInstanceUpdatesAnotherSharingTheDefaults() {
+        let root = scratch()
+        let c = client(root: root, files: ["sdui/cards/c.json": cardJSON(id: "c")])
+        let defaults = freshDefaults()
+        let options = ShipUIOptions(deeplinkScheme: "shipsample")
+        let a = ShipCards(client: c, options: options, defaults: defaults)
+        let b = ShipCards(client: c, options: options, defaults: defaults)
+        #expect(b.cards(tab: "discover").map(\.id) == ["c"])
+        var fired = 0
+        let sub = b.objectWillChange.sink { fired += 1 }
+        a.dismiss("c")
+        #expect(fired == 1)
+        #expect(b.cards(tab: "discover").isEmpty)
+        sub.cancel()
+    }
+
+    @Test func aDismissDoesNotPublishTwiceOnTheInstanceThatMadeIt() {
+        let c = client(root: scratch(), files: ["sdui/cards/c.json": cardJSON(id: "c")])
+        let a = ShipCards(client: c, options: ShipUIOptions(deeplinkScheme: "shipsample"), defaults: freshDefaults())
+        var fired = 0
+        let sub = a.objectWillChange.sink { fired += 1 }
+        a.dismiss("c")
+        #expect(fired == 1)
+        sub.cancel()
+    }
+
     // MARK: Images
 
     private func png(width: Int, height: Int) -> URL {
