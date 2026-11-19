@@ -224,6 +224,9 @@ Then open the app and sync: the new content shows without a store release.
 - `ship revert --platform ios --channel production --yes` is the kill switch: devices
   drop all over-the-air content and go back to what is built into the app.
   `ship rollback` undoes a revert.
+- Devices pick up a publish, revert or rollback on their next sync, once the CDN's copy of
+  the manifest expires: allow about a minute. A device that syncs sooner keeps what it had
+  and gets the change on the sync after that.
 
 ## Known differences between iOS and Android
 
