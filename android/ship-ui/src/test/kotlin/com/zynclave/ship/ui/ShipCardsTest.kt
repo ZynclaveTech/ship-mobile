@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
+import android.os.Looper
+import org.robolectric.Shadows.shadowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -125,5 +127,29 @@ class ShipCardsTest {
         compose.runOnIdle { tab = null }
         compose.waitForIdle()
         compose.waitUntil(5_000) { shown.isEmpty() }
+    }
+
+    @Test
+    fun `a dismissal in one instance moves the other, which stops listing the card`() {
+        val client = testClient(temp.newFolder(), "r1", mapOf(file("a"), file("b", position = 1)))
+        val a = ShipCards(app, client, options())
+        val b = ShipCards(app, client, options())
+        assertEquals(listOf("a", "b"), b.cards("discover", now).map { it.id })
+        val before = b.changes.value
+
+        a.dismiss("a")
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("one bump on the other instance", before + 1, b.changes.value)
+        assertEquals(listOf("b"), b.cards("discover", now).map { it.id })
+        assertEquals("the dismissing instance bumps once, not twice", 1, a.changes.value)
+    }
+
+    @Test
+    fun `a change to other preferences does not move an instance`() {
+        val cards = cards(mapOf(file("a")))
+        app.getSharedPreferences("zynclave_sdui", Context.MODE_PRIVATE).edit().putString("other", "x").commit()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, cards.changes.value)
     }
 }

@@ -57,7 +57,10 @@ internal object SduiActions {
         when (action) {
             // Through the app's own routing, so only routes it already supports do anything.
             is Sdui.Action.Deeplink -> options.openDeeplink(Uri.parse(action.url))
-            is Sdui.Action.Web -> openWeb(context, action.url)
+            is Sdui.Action.Web -> {
+                val hook = options.openWeb
+                if (hook != null) hook(Uri.parse(action.url)) else openWeb(context, action.url)
+            }
             Sdui.Action.Dismiss -> dismiss()
         }
     }

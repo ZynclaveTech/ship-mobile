@@ -128,6 +128,13 @@ public class ShipUiOptions(
      * own palette lists its own names here.
      */
     public val themeTokens: Set<String> = ShipTheme.DEFAULT_TOKENS,
+    /**
+     * Opens the URL of a `web` action (buttons and card taps), e.g. in the
+     * app's own in-app browser. Null (the default) starts the system browser
+     * with an `ACTION_VIEW` + `BROWSABLE` intent. Only `https` URLs reach it:
+     * the parser rejects any other `web` action.
+     */
+    public val openWeb: ((Uri) -> Unit)? = null,
 ) {
     init {
         require(isValidDeeplinkScheme(deeplinkScheme)) {
