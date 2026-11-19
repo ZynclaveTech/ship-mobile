@@ -5,10 +5,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import com.zynclave.ship.ShipContent
 import com.zynclave.ship.ShipStrings
 import com.zynclave.ship.ShipTheme
-import java.util.Locale
 
 /**
  * Receives the analytics events the views raise: `sdui_impression`,
@@ -56,10 +56,12 @@ public class ShipUiOptions(
     public val openDeeplink: (Uri) -> Unit,
     /**
      * The language code used to look up a release's OTA strings
-     * (`strings/<code>.json`): the app's chosen language. Default: the
-     * device's primary language code.
+     * (`strings/<code>.json`). Default (null): the language of the resources
+     * the popup or card is drawn with, so it follows the app's own language
+     * choice (per-app language, or an in-app picker that wraps the context).
+     * [currentLanguage] gives the resolved code for the host's own text.
      */
-    public val language: () -> String = ::deviceLanguage,
+    public val language: (() -> String)? = null,
     /**
      * A text `key` to the app's own (localised) string, or null to use the
      * definition's `fallback`. Text resolves as: the release's OTA string for
@@ -145,8 +147,17 @@ internal fun isValidDeeplinkScheme(scheme: String): Boolean {
 }
 
 
-/** The device's primary language code, e.g. `hi`. */
-internal fun deviceLanguage(): String = ShipStrings.releaseLanguage(Locale.getDefault().language.ifEmpty { "en" })
+/**
+ * The language Ship reads OTA strings in, as a release code (`in` → `id`):
+ * [ShipUiOptions.language] when the app set one, else the language of the
+ * resources this composition draws with.
+ */
+@Composable
+public fun ShipUiOptions.currentLanguage(): String =
+    language?.invoke() ?: configurationLanguage(LocalConfiguration.current.locales[0]?.language)
+
+internal fun configurationLanguage(code: String?): String =
+    ShipStrings.releaseLanguage(code?.ifEmpty { null } ?: "en")
 
 /** What a rendered definition needs from its host, passed down the composition. */
 internal class ShipRuntime(
@@ -163,14 +174,14 @@ internal class ShipRuntime(
      * app's own string; the literal fallback when neither has it. Then
      * `personalize`.
      */
-    fun text(v: Sdui.TextValue): String {
+    fun text(v: Sdui.TextValue, language: String = options.language?.invoke() ?: configurationLanguage(null)): String {
         var text = v.fallback.orEmpty()
-        v.key?.let { key -> (ota(key) ?: options.appString(key))?.let { text = it } }
+        v.key?.let { key -> (ota(key, language) ?: options.appString(key))?.let { text = it } }
         return options.personalize(text)
     }
 
-    private fun ota(key: String): String? =
-        content?.takeIf { it.state?.revertToEmbedded == false }?.string(key, options.language())
+    private fun ota(key: String, language: String): String? =
+        content?.takeIf { it.state?.revertToEmbedded == false }?.string(key, language)
 
     /**
      * The release's theme override for [token] (if allowed), then the app's

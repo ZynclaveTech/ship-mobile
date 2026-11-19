@@ -68,7 +68,7 @@ public class ShipCards internal constructor(
     internal val runtime get() = ShipRuntime(options, client.content)
 
     /** Impression tracking for the cards on screen; see [ShipImpressionsEffect]. */
-    public val impressions: SduiImpressions = SduiImpressions(clock) { analytics.impression(it) }
+    internal val impressions: SduiImpressions = SduiImpressions(clock) { analytics.impression(it) }
 
     private val feedLoads = SduiFeedLoads()
 

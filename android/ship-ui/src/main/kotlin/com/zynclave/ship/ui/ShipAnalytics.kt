@@ -87,15 +87,11 @@ internal class SduiImpressionTracker {
 
 /**
  * How much of a card is visible: its window extent [top]..[bottom] (already
- * clipped by the list) within [viewport], over its full [height]. The
- * viewport is the part of the list nothing sits over - a floating header
- * and a bottom bar draw over the list's content padding.
+ * clipped by the list) over its full [height].
  */
-internal fun visibleFraction(top: Float, bottom: Float, height: Float, viewport: Pair<Float, Float>?): Float {
+internal fun visibleFraction(top: Float, bottom: Float, height: Float): Float {
     if (height <= 0f) return 0f
-    val visibleTop = maxOf(top, viewport?.first ?: top)
-    val visibleBottom = minOf(bottom, viewport?.second ?: bottom)
-    return ((visibleBottom - visibleTop).coerceAtLeast(0f) / height).coerceIn(0f, 1f)
+    return ((bottom - top).coerceAtLeast(0f) / height).coerceIn(0f, 1f)
 }
 
 /**
@@ -104,7 +100,7 @@ internal fun visibleFraction(top: Float, bottom: Float, height: Float, viewport:
  * without a report (the feed waits for it and calls [tick]; see
  * [ShipImpressionsEffect]). Main thread.
  */
-public class SduiImpressions internal constructor(
+internal class SduiImpressions(
     private val clock: () -> Long,
     private val onImpression: (String) -> Unit,
 ) {
@@ -115,19 +111,7 @@ public class SduiImpressions internal constructor(
     private val nextCheck = MutableStateFlow<Long?>(null)
 
     /** The wall-clock time (ms) to call [tick] at, or null when nothing is pending. */
-    public val deadline: StateFlow<Long?> = nextCheck.asStateFlow()
-
-    /**
-     * The window range (top, bottom px) nothing covers. Set by the feed; a
-     * change re-evaluates every card, since a card that sits still reports
-     * nothing new.
-     */
-    internal var viewport: Pair<Float, Float>? = null
-        set(value) {
-            if (field == value) return
-            field = value
-            tick()
-        }
+    val deadline: StateFlow<Long?> = nextCheck.asStateFlow()
 
     /** [id] spans [top]..[bottom] in the window (clipped by the list) and is [height] tall. */
     internal fun report(id: String, top: Float, bottom: Float, height: Float) {
@@ -143,7 +127,7 @@ public class SduiImpressions internal constructor(
 
     internal fun tick() {
         val fractions = extents
-            .mapValues { (_, e) -> visibleFraction(e.top, e.bottom, e.height, viewport) }
+            .mapValues { (_, e) -> visibleFraction(e.top, e.bottom, e.height) }
             .filterValues { it > 0f }
         tracker.update(fractions, clock()).forEach(onImpression)
         nextCheck.value = tracker.nextDeadline()
