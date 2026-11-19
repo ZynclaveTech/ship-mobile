@@ -128,6 +128,18 @@ private struct ProbeTile: View {
         #expect(defaulted == [url])
     }
 
+    /// A 0.1.0 call site with a trailing closure still binds it to `openDeeplink`.
+    /// (This target builds in Swift 6 mode, which matches forward; the Swift 5
+    /// backward-matching rule is guarded by the parameter order and the comment
+    /// beside `openWeb` in the initialiser, checked by hand with `swiftc -swift-version 5`.)
+    @Test func aTrailingClosureStillBindsToOpenDeeplink() {
+        var deeplinked: [URL] = []
+        let options = ShipUIOptions(deeplinkScheme: "shipsample", color: { _ in nil }) { deeplinked.append($0) }
+        options.openDeeplink(URL(string: "shipsample://x")!)
+        #expect(deeplinked.count == 1)
+        #expect(options.openWeb == nil)
+    }
+
     @Test func openWebCanBePassedToTheInitialiser() {
         var hooked: [URL] = []
         let options = ShipUIOptions(deeplinkScheme: "shipsample", openWeb: { hooked.append($0) })
@@ -151,6 +163,18 @@ private struct ProbeTile: View {
         a.dismiss("c")
         #expect(fired == 1)
         #expect(b.cards(tab: "discover").isEmpty)
+        sub.cancel()
+    }
+
+    @Test func writingAnUnrelatedKeyToTheSameDefaultsDoesNotPublish() {
+        let c = client(root: scratch(), files: ["sdui/cards/c.json": cardJSON(id: "c")])
+        let defaults = freshDefaults()
+        let cards = ShipCards(client: c, options: ShipUIOptions(deeplinkScheme: "shipsample"), defaults: defaults)
+        var fired = 0
+        let sub = cards.objectWillChange.sink { fired += 1 }
+        defaults.set("x", forKey: "some.other.key")
+        #expect(fired == 0)
+        #expect(cards.cards(tab: "discover").map(\.id) == ["c"])
         sub.cancel()
     }
 

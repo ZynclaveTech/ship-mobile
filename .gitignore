@@ -15,3 +15,4 @@ Package.resolved
 # Xcode build output
 *.xcarchive
 *.dSYM/
+.DS_Store

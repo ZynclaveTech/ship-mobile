@@ -63,18 +63,21 @@ public class ShipCards internal constructor(
     private var parsed: Pair<String, List<Sdui.Card>>? = null
 
     /** The dismissed set this instance last acted on, to tell a change made through another instance. */
-    @Volatile private var lastDismissed: Set<String> = emptySet()
+    private var lastDismissed: Set<String> = emptySet()
+
+    /** Guards [lastDismissed] only: `all()` holds `this` while parsing files, and the listener runs on main. */
+    private val dismissedLock = Any()
 
     // Held strongly: SharedPreferences keeps its listeners weakly.
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key != DISMISSED && key != null) return@OnSharedPreferenceChangeListener
         val now = dismissed()
-        val moved = synchronized(this) { (now != lastDismissed).also { if (it) lastDismissed = now } }
+        val moved = synchronized(dismissedLock) { (now != lastDismissed).also { if (it) lastDismissed = now } }
         if (moved) changed.value++
     }
 
     init {
-        lastDismissed = dismissed()
+        synchronized(dismissedLock) { lastDismissed = dismissed() }
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
     }
 
@@ -123,7 +126,7 @@ public class ShipCards internal constructor(
         synchronized(this) {
             val current = dismissed()
             if (id in current) return
-            lastDismissed = current + id
+            synchronized(dismissedLock) { lastDismissed = current + id }
             prefs.edit().putStringSet(DISMISSED, current + id).apply()
         }
         analytics.dismiss(id)

@@ -103,8 +103,12 @@ public struct ShipUIOptions: @unchecked Sendable {
         analytics: ShipAnalyticsSink? = nil,
         components: [String: (SDUI.CustomNode) -> AnyView] = [:],
         embeddedPopups: Bundle? = nil,
-        themeTokens: Set<String> = ShipTheme.defaultTokens,
-        openWeb: ((URL) -> Void)? = nil
+        // Keep `openWeb` out of the last position: under Swift 5 language mode an
+        // unlabeled trailing closure is matched backward, to the last closure-typed
+        // parameter, so a 0.1.0 call `ShipUIOptions(deeplinkScheme:) { ... }` would
+        // silently bind to it. `themeTokens` (not a closure) must stay after it.
+        openWeb: ((URL) -> Void)? = nil,
+        themeTokens: Set<String> = ShipTheme.defaultTokens
     ) {
         Self.checkScheme(deeplinkScheme)
         self.deeplinkScheme = deeplinkScheme
