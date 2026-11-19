@@ -34,8 +34,6 @@ public enum ShipTheme {
         let dark: ShipRGBA
     }
 
-    private static let cache = ReleaseCache<[String: Pair]>(empty: [:])
-
     /// Parses `data`, keeping only the tokens in `allowed`.
     static func parse(_ data: Data, allowed: Set<String> = defaultTokens) -> [String: Pair] {
         parseAll(data).filter { allowed.contains($0.key) }
@@ -79,7 +77,7 @@ public enum ShipTheme {
     public static func color(_ token: String, dark: Bool, in content: ShipContent,
                              allowed: Set<String> = defaultTokens) -> ShipRGBA? {
         guard allowed.contains(token) else { return nil }
-        let theme = cache.value(for: content) {
+        let theme = content.themeCache.value(for: content) {
             content.url(for: "config/theme.json").flatMap { try? Data(contentsOf: $0) }.map(parseAll) ?? [:]
         }
         return color(token, dark: dark, in: theme)

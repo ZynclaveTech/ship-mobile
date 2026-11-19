@@ -90,4 +90,25 @@ import Testing
         #expect(ShipFlags.bool("beta", in: c.content) == nil)
         #expect(ShipTheme.color("primary", dark: false, in: c.content) == nil)
     }
+
+    @Test func sameReleaseIDInTwoClientsDoesNotShareParsedValues() async throws {
+        func synced(flag: Bool, color: String) async throws -> ShipClient {
+            let f = Fixture()
+            var a1 = f.cdn.blob(try JSONSerialization.data(withJSONObject: ["beta": flag])); a1["name"] = "config/flags.json"
+            var a2 = f.cdn.blob(try JSONSerialization.data(withJSONObject: ["primary": color])); a2["name"] = "config/theme.json"
+            f.cdn.set("/v1/manifest", try f.signer.envelope(manifest(seq: 1, assets: [a1, a2])))  // release id "r1" in both
+            let c = f.client()
+            try await c.sync()
+            return c
+        }
+        let on = try await synced(flag: true, color: "#FF0000")
+        let off = try await synced(flag: false, color: "#00FF00")
+        #expect(on.content.state?.releaseID == off.content.state?.releaseID)
+        for _ in 0..<3 {
+            #expect(ShipFlags.bool("beta", in: on.content) == true)
+            #expect(ShipFlags.bool("beta", in: off.content) == false)
+            #expect(ShipTheme.color("primary", dark: false, in: on.content)?.r == 1)
+            #expect(ShipTheme.color("primary", dark: false, in: off.content)?.g == 1)
+        }
+    }
 }

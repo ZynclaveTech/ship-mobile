@@ -87,6 +87,11 @@ public final class ShipContent: Sendable {
 
     private let lock = OSAllocatedUnfairLock(initialState: Snapshot())
 
+    /// Parsed flags and theme of this content's applied release. Per instance,
+    /// so two contents never read each other's values, whatever their release ids.
+    let flagsCache = ReleaseCache<ShipFlags.FlagBox>(empty: ShipFlags.FlagBox([:]))
+    let themeCache = ReleaseCache<[String: ShipTheme.Pair]>(empty: [:])
+
     public var state: AppliedState? { lock.withLock { $0.state } }
 
     /// File URL of an applied asset, or nil when no release (or a revert) is applied.
