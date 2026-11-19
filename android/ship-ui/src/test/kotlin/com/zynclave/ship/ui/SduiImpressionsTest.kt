@@ -167,6 +167,38 @@ class ShipAnalyticsTest {
     }
 
     @Test
+    fun `visibility excludes what the floating header and the bottom bar cover`() {
+        val viewport = 100f to 900f // the list minus its content padding
+        assertEquals(1f, visibleFraction(200f, 400f, 200f, viewport))
+        assertEquals("half under the header", 0.5f, visibleFraction(0f, 200f, 200f, viewport))
+        assertEquals("entirely under the header", 0f, visibleFraction(0f, 100f, 100f, viewport))
+        assertEquals("a quarter under the bottom bar", 0.75f, visibleFraction(750f, 950f, 200f, viewport))
+        assertEquals("already clipped by the list", 0.5f, visibleFraction(500f, 600f, 200f, viewport))
+        assertEquals("no viewport: the clipped bounds", 0.5f, visibleFraction(0f, 100f, 200f, null))
+        assertEquals(0f, visibleFraction(0f, 0f, 0f, viewport))
+    }
+
+    @Test
+    fun `a card under the header is not counted, and setting ShipCards viewport re-evaluates a card that sits still`() {
+        var now = 0L
+        val cards = ShipCards(app, testClient(temp.newFolder()), options, clock = { now })
+        assertNull("default: clipped list bounds only", cards.viewport)
+        cards.viewport = 200f to 1_000f // a 200 px header over the top of the list
+        assertEquals(200f to 1_000f, cards.viewport)
+        cards.impressions.report("hidden", top = 0f, bottom = 180f, height = 180f)
+        assertNull("nothing pending: it is under the header", cards.impressions.deadline.value)
+        now = 5_000
+        cards.impressions.tick()
+        assertEquals(emptyList<String>(), sink.names)
+
+        cards.viewport = 0f to 1_000f // the header hides away: the card is now seen, without moving
+        assertEquals(6_000L, cards.impressions.deadline.value)
+        now = 6_000
+        cards.impressions.tick()
+        assertEquals(listOf("sdui_impression"), sink.names)
+    }
+
+    @Test
     fun `a new feed load lets every card count again`() {
         var now = 0L
         val cards = ShipCards(app, testClient(temp.newFolder()), options, clock = { now })

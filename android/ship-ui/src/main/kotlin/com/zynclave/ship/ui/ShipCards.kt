@@ -1,6 +1,7 @@
 package com.zynclave.ship.ui
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,25 @@ public class ShipCards internal constructor(
     private val changed = MutableStateFlow(0)
     private var parsed: Pair<String, List<Sdui.Card>>? = null
 
+    /** The dismissed set this instance last acted on, to tell a change made through another instance. */
+    private var lastDismissed: Set<String> = emptySet()
+
+    /** Guards [lastDismissed] only: `all()` holds `this` while parsing files, and the listener runs on main. */
+    private val dismissedLock = Any()
+
+    // Held strongly: SharedPreferences keeps its listeners weakly.
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key != DISMISSED && key != null) return@OnSharedPreferenceChangeListener
+        val now = dismissed()
+        val moved = synchronized(dismissedLock) { (now != lastDismissed).also { if (it) lastDismissed = now } }
+        if (moved) changed.value++
+    }
+
+    init {
+        synchronized(dismissedLock) { lastDismissed = dismissed() }
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
+    }
+
     /** Moves each time what [cards] returns may have changed: a card dismissed, or [refresh] called. */
     public val changes: StateFlow<Int> = changed.asStateFlow()
 
@@ -71,6 +91,20 @@ public class ShipCards internal constructor(
     internal val impressions: SduiImpressions = SduiImpressions(clock) { analytics.impression(it) }
 
     private val feedLoads = SduiFeedLoads()
+
+    /**
+     * The window range (top, bottom, in px) of the list that nothing covers:
+     * the list's bounds minus a floating header or bottom bar that draws over
+     * it. A card counts as seen only for the part of it inside this range.
+     * Set it from the feed's host (e.g. from `onGloballyPositioned`); setting a
+     * new value re-evaluates every card on screen, even one that sits still.
+     * Null (the default) uses the list's clipped bounds alone. Main thread.
+     */
+    public var viewport: Pair<Float, Float>?
+        get() = impressions.viewport
+        set(value) {
+            impressions.viewport = value
+        }
 
     /**
      * The cards to show on [tab] (`discover`, `following`): valid, in
@@ -92,6 +126,7 @@ public class ShipCards internal constructor(
         synchronized(this) {
             val current = dismissed()
             if (id in current) return
+            synchronized(dismissedLock) { lastDismissed = current + id }
             prefs.edit().putStringSet(DISMISSED, current + id).apply()
         }
         analytics.dismiss(id)

@@ -55,7 +55,7 @@ Debug builds read `testflight`, release builds read `production`.
 
 ## Add the SDK to your app
 
-Both are available once 0.1.0 is released.
+Both are released: the current version is 0.1.1.
 
 **iOS (SwiftPM).** Add the package `https://github.com/ZynclaveTech/ship-mobile`, from `"0.1.0"`:
 
@@ -67,7 +67,7 @@ Both are available once 0.1.0 is released.
 **Android (Gradle).**
 
 ```kotlin
-implementation("com.zynclave.ship:ship-ui:0.1.0")
+implementation("com.zynclave.ship:ship-ui:0.1.1")
 ```
 
 `ship-ui` pulls in `ship-core`. Depend on `com.zynclave.ship:ship-core` alone if you
@@ -121,6 +121,15 @@ Your host app has a few jobs:
   bundle's preferred localization, on Android the locale of the resources the popup or card
   is drawn with (so a per-app language or an in-app picker applies). Set `language` to
   override it; on Android, `options.currentLanguage()` gives the same code for your own text.
+- To open `web` actions (buttons and card taps) in your own in-app browser, set
+  `openWeb` on the options (`(URL) -> Void` on iOS, `(Uri) -> Unit` on Android). Left
+  unset, they open in the system browser.
+- On Android, if a floating header or bottom bar draws over your feed, set
+  `cards.viewport = top to bottom` (window px of the part of the list nothing covers) so
+  a card under it is not counted as seen. Setting it re-checks every card on screen.
+  Unset, the list's own bounds are used.
+- Dismissing a card is shared by every `ShipCards` in the process: a second instance
+  (another tab or screen) drops the card at once, with no call to `refresh()`.
 
 ## Get your own workspace
 

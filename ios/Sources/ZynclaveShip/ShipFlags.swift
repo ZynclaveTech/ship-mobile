@@ -31,8 +31,6 @@ final class ReleaseCache<Value: Sendable>: Sendable {
 /// undecodable file, a missing key or a value of the wrong JSON type. The
 /// caller then uses its built-in default.
 public enum ShipFlags {
-    private static let cache = ReleaseCache<FlagBox>(empty: FlagBox([:]))
-
     /// Top-level JSON object; values are kept as decoded and type-checked on read.
     struct FlagBox: @unchecked Sendable {
         let values: [String: Any]
@@ -44,7 +42,7 @@ public enum ShipFlags {
     }
 
     private static func flags(_ content: ShipContent) -> [String: Any] {
-        cache.value(for: content) {
+        content.flagsCache.value(for: content) {
             FlagBox(content.url(for: "config/flags.json").flatMap { try? Data(contentsOf: $0) }.map(parse) ?? [:])
         }.values
     }
