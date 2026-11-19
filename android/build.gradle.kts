@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.maven.publish) apply false
 }
 
-val shipVersion = "0.1.0"
+val shipVersion = "0.1.1"
 
 // A property set to an empty or blank value (an unset CI secret, say) is not a key.
 val signingConfigured = listOf("signingInMemoryKey", "signing.keyId", "signing.gnupg.keyName")
